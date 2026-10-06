@@ -144,5 +144,15 @@
     return rightSide && keys > 1 ? name : letter;
   }
 
-  return { SLOTS, parseStroke, parseLayout, namesInBits, buildWords, popcount, renderStroke, displayName };
+  // Which part of the steno layout a key is in, so the page can colour the left-hand keys,
+  // the vowels and star, and the right-hand keys differently. '#' is none of them.
+  function keyGroup(name) {
+    const index = slotIndex.get(name);
+    if (index === undefined || index === NUMBER_SLOT) return '';
+    if (index < LEFT_END) return 'left';
+    if (index < 12) return 'middle';
+    return 'right';
+  }
+
+  return { SLOTS, parseStroke, parseLayout, namesInBits, buildWords, popcount, renderStroke, displayName, keyGroup };
 });

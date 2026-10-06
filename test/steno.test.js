@@ -75,6 +75,11 @@ test('displayName keeps the dash only where a letter has a left and a right key'
   assert.deepEqual(names(['S-', '-S', 'T-', '-T', 'R-', '-R', 'P-', '-P']), ['S', '-S', 'T', '-T', 'R', '-R', 'P', '-P']);
 });
 
+test('keyGroup puts left-hand keys, vowels and star, and right-hand keys in their own groups', () => {
+  const groups = ['S-', 'R-', 'A-', '*', '-E', '-U', '-F', '-T', '#'].map(steno.keyGroup);
+  assert.deepEqual(groups, ['left', 'left', 'middle', 'middle', 'middle', 'middle', 'right', 'right', '']);
+});
+
 test('renderStroke writes a stroke bitmask in Plover notation', () => {
   for (const text of ['KAT', '-PB', 'TEFT', '#T', 'STKPWHR', '-FRPBLGTSDZ', '*', 'TK-PB', 'R-R']) {
     assert.equal(steno.renderStroke(steno.parseStroke(text)), text);

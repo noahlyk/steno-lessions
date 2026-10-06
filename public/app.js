@@ -249,7 +249,8 @@
         for (const name of S.namesInBits(bits)) {
           const ch = document.createElement('span');
           const isHeld = (held & (1 << state.slotIndex.get(name))) !== 0;
-          ch.className = isHeld ? 'ch held' : 'ch';
+          const group = S.keyGroup(name);
+          ch.className = `ch${group ? ` ${group}` : ''}${isHeld ? ' held' : ''}`;
           ch.textContent = state.slotByName.get(name)?.sound || name;
           sound.appendChild(ch);
         }

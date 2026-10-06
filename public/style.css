@@ -10,6 +10,9 @@
   --steno-ink: #1d4f7a;
   --locked: #d6d5ce;
   --locked-ink: #55544e;
+  --divider: #b9b8b0;
+  --middle-ink: #9a5b12;
+  --right-ink: #6b4fa0;
   --target: #2f7fd1;
   --target-ink: #ffffff;
   --down: #f2b84b;
@@ -30,6 +33,9 @@
     --steno-ink: #a9d0f2;
     --locked: #3a3a35;
     --locked-ink: #c4c3ba;
+    --divider: #77766d;
+    --middle-ink: #e3b26a;
+    --right-ink: #b9a3e6;
     --target: #3b8ee0;
     --down: #d9a03a;
     --good: #5fbf85;
@@ -49,6 +55,9 @@
   --steno-ink: #a9d0f2;
   --locked: #3a3a35;
   --locked-ink: #c4c3ba;
+  --divider: #77766d;
+  --middle-ink: #e3b26a;
+  --right-ink: #b9a3e6;
   --target: #3b8ee0;
   --down: #d9a03a;
   --good: #5fbf85;
@@ -187,7 +196,8 @@ main {
   grid-row: 2;
   position: relative;
   display: flex;
-  gap: 4px;
+  gap: 1px;
+  padding: 0 7px;
   font-size: 19px;
   font-weight: 700;
   color: var(--ink);
@@ -195,10 +205,17 @@ main {
 }
 .kc {
   grid-row: 3;
+  padding: 0 7px;
   font: 600 15px ui-monospace, Menlo, monospace;
   color: var(--muted);
   white-space: nowrap;
 }
+/* Each stroke of a word is a group. A divider line and extra space between groups show where
+   one chord ends and the next begins */
+.snd + .snd, .kc + .kc { border-left: 2px solid var(--divider); }
+/* Left-hand keys, vowels and right-hand keys each have their own colour in the stream */
+.ch.middle { color: var(--middle-ink); }
+.ch.right { color: var(--right-ink); }
 .kc.current { color: var(--target); }
 /* Each sound in the stroke being typed is blue, and turns green while its key is held */
 .snd.current .ch { color: var(--target); }
