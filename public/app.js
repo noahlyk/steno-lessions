@@ -281,7 +281,7 @@
       const slot = state.slotByName.get(name);
       item.innerHTML =
         `<span class="name">${escapeHtml(S.ploverLetter(name))}</span>` +
-        `<span class="sound">${escapeHtml(slot.sound)}<span class="keyname"> · key ${escapeHtml(slot.label)}</span></span>` +
+        `<span class="sound">${escapeHtml(slot.sound)}<span class="keyname"> · ${escapeHtml(slot.label)}</span></span>` +
         `<span class="bar"><i style="width:${Math.round(confidence * 100)}%"></i></span>`;
       list.appendChild(item);
     });
@@ -295,12 +295,12 @@
     const target = L.wpmTarget(progress.unlocked);
     const need = Math.round(L.ACCURACY_TARGET * 100);
     $('stats').innerHTML =
-      `<span>keys <strong>${progress.unlocked}</strong> of ${L.KEY_ORDER.length}</span>` +
-      `<span>wpm <strong>${wpm}</strong> <small>need ${target}</small></span>` +
-      `<span>accuracy <strong>${accuracy}%</strong> <small>need ${need}%</small></span>` +
+      `<span>keys <strong>${progress.unlocked}</strong>/${L.KEY_ORDER.length}</span>` +
+      `<span title="current / needed">wpm <strong>${wpm}</strong>/${target}</span>` +
+      `<span title="current / needed">accuracy <strong>${accuracy}%</strong>/${need}%</span>` +
       `<span>words <strong>${state.typed}</strong></span>`;
     $('window-note').textContent =
-      `${stats.count} of ${L.WORD_WINDOW} words counted toward the next key`;
+      `${stats.count}/${L.WORD_WINDOW} words to the next key`;
   }
 
   function refresh() {
@@ -337,7 +337,7 @@
       state.wordMisses += 1;
       L.recordChord(state.progress, S.namesInBits(target), ms, false);
       setFeedback(
-        `You pressed ${namesOf(chord)}. The stroke needs ${S.renderStroke(target)} (${namesOf(target)}).`,
+        `Needs ${S.renderStroke(target)} (${namesOf(target)}). You pressed ${namesOf(chord)}.`,
         'bad',
       );
       refresh();
@@ -347,7 +347,7 @@
     L.recordChord(state.progress, S.namesInBits(chord), ms, true);
     state.candidates = matches;
     state.strokeIdx += 1;
-    setFeedback(`Good, ${Math.round(ms)} ms`, 'good');
+    setFeedback('Good', 'good');
     if (matches.some((strokes) => strokes.length === state.strokeIdx)) {
       wordDone();
     } else {
@@ -363,7 +363,7 @@
       const name = L.KEY_ORDER[state.progress.unlocked - 1];
       const sound = state.slotByName.get(name)?.sound || '';
       setFeedback(
-        `New key unlocked: ${name} (sound ${sound}). The next one needs ${L.wpmTarget(state.progress.unlocked)} wpm.`,
+        `Unlocked ${name} (${sound}). Next: ${L.wpmTarget(state.progress.unlocked)} wpm.`,
         'good',
       );
     }
