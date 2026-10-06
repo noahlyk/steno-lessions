@@ -5,10 +5,11 @@
   --muted: #8a8a84;
   --line: #e2e0d8;
   --plain: #ecebe6;
-  --plain-ink: #b9b8b0;
+  --plain-ink: #6d6c66;
   --steno: #d7e8f7;
   --steno-ink: #1d4f7a;
-  --locked: #f0f0ec;
+  --locked: #d6d5ce;
+  --locked-ink: #55544e;
   --target: #2f7fd1;
   --target-ink: #ffffff;
   --down: #f2b84b;
@@ -24,10 +25,11 @@
     --muted: #8f8e86;
     --line: #34332f;
     --plain: #232320;
-    --plain-ink: #4f4e48;
+    --plain-ink: #9a998f;
     --steno: #203447;
     --steno-ink: #a9d0f2;
-    --locked: #1b1b19;
+    --locked: #3a3a35;
+    --locked-ink: #c4c3ba;
     --target: #3b8ee0;
     --down: #d9a03a;
     --good: #5fbf85;
@@ -42,10 +44,11 @@
   --muted: #8f8e86;
   --line: #34332f;
   --plain: #232320;
-  --plain-ink: #4f4e48;
+  --plain-ink: #9a998f;
   --steno: #203447;
   --steno-ink: #a9d0f2;
-  --locked: #1b1b19;
+  --locked: #3a3a35;
+  --locked-ink: #c4c3ba;
   --target: #3b8ee0;
   --down: #d9a03a;
   --good: #5fbf85;
@@ -182,6 +185,9 @@ main {
 
 .snd {
   grid-row: 2;
+  position: relative;
+  display: flex;
+  gap: 4px;
   font-size: 19px;
   font-weight: 700;
   color: var(--ink);
@@ -193,7 +199,19 @@ main {
   color: var(--muted);
   white-space: nowrap;
 }
-.snd.current, .kc.current { color: var(--target); }
+.kc.current { color: var(--target); }
+/* Each sound in the stroke being typed is blue, and turns green while its key is held */
+.snd.current .ch { color: var(--target); }
+.snd.current .ch.held { color: var(--good); }
+/* Keys held that the stroke does not use. Drawn past the sound, so the layout does not move */
+.extra {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  padding-left: 4px;
+  color: var(--bad);
+  pointer-events: none;
+}
 .snd.done, .kc.done { opacity: 0.45; }
 
 .toggle {
@@ -330,12 +348,11 @@ main {
 
 .key.locked {
   background: var(--locked);
-  color: var(--muted);
-  border: 1px dashed var(--line);
+  color: var(--locked-ink);
+  border: 1px solid var(--line);
   font-weight: 400;
 }
 
-.key.locked.steno { opacity: 0.4; }
 
 .key.target {
   background: var(--target);
@@ -372,7 +389,7 @@ main {
   border: 1px solid var(--line);
 }
 .swatch.steno { background: #d8cb6a; border-color: transparent; }
-.swatch.locked { background: var(--locked); border-style: dashed; }
+.swatch.locked { background: var(--locked); }
 .swatch.target { background: var(--target); border-color: transparent; }
 .swatch.down { background: var(--down); border-color: transparent; }
 
@@ -406,7 +423,7 @@ main {
   overflow: hidden;
 }
 .key-list .bar i { display: block; height: 100%; background: var(--good); border-radius: 3px; }
-.key-list li.locked { opacity: 0.5; }
+.key-list li.locked .name { color: var(--muted); }
 
 .summary {
   position: fixed;

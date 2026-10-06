@@ -96,7 +96,9 @@
   const shownStrokes = () => state.candidates[0] || [];
   const currentStroke = () => shownStrokes()[state.strokeIdx] || 0;
   const unlockedMask = () => L.unlockedMask(state.progress, state.slotIndex);
-  const namesOf = (bits) => S.namesInBits(bits).join(' ') || 'nothing';
+  const namesOf = (bits) => S.namesInBits(bits).map(S.displayName).join(' ') || 'nothing';
+  // The steno keys held right now, as a stroke mask
+  const heldBits = () => [...state.pressed].reduce((bits, code) => bits | (state.infoByCode.get(code)?.bits || 0), 0);
 
   function setFeedback(text, kind) {
     const el = $('feedback');
@@ -243,9 +245,23 @@
         const sound = document.createElement('span');
         sound.className = `snd ${status}`;
         sound.style.gridColumn = column + 1;
-        sound.textContent = S.namesInBits(bits)
-          .map((name) => state.slotByName.get(name)?.sound || name)
-          .join(' ');
+        const held = status === 'current' ? heldBits() : 0;
+        for (const name of S.namesInBits(bits)) {
+          const ch = document.createElement('span');
+          const isHeld = (held & (1 << state.slotIndex.get(name))) !== 0;
+          ch.className = isHeld ? 'ch held' : 'ch';
+          ch.textContent = state.slotByName.get(name)?.sound || name;
+          sound.appendChild(ch);
+        }
+        if (status === 'current') {
+          const wrong = S.namesInBits(held & ~bits);
+          if (wrong.length) {
+            const extra = document.createElement('span');
+            extra.className = 'extra';
+            extra.textContent = wrong.map((name) => state.slotByName.get(name)?.sound || name).join(' ');
+            sound.appendChild(extra);
+          }
+        }
         const keys = document.createElement('span');
         keys.className = `kc ${status}`;
         keys.style.gridColumn = column + 1;
@@ -271,7 +287,7 @@
       const confidence = L.confidence(state.progress, name);
       const slot = state.slotByName.get(name);
       item.innerHTML =
-        `<span class="name">${escapeHtml(name)}</span>` +
+        `<span class="name">${escapeHtml(S.displayName(name))}</span>` +
         `<span class="sound">${escapeHtml(slot.sound)}<span class="keyname"> · ${escapeHtml(slot.label)}</span></span>` +
         `<span class="bar"><i style="width:${Math.round(confidence * 100)}%"></i></span>`;
       list.appendChild(item);
@@ -292,6 +308,12 @@
       `<span>words <strong>${state.typed}</strong></span>`;
     $('window-note').textContent =
       `${stats.count}/${L.WORD_WINDOW} words to the next key`;
+  }
+
+  // Keyboard and stream together, so held keys show on the word as well
+  function renderChord() {
+    renderKeyboard();
+    renderStream();
   }
 
   function refresh() {
@@ -353,7 +375,7 @@
       const name = L.KEY_ORDER[state.progress.unlocked - 1];
       const sound = state.slotByName.get(name)?.sound || '';
       setFeedback(
-        `Unlocked ${name} (${sound}). Next: ${L.wpmTarget(state.progress.unlocked)} wpm.`,
+        `Unlocked ${S.displayName(name)} (${sound}). Next: ${L.wpmTarget(state.progress.unlocked)} wpm.`,
         'good',
       );
     }
@@ -364,28 +386,16 @@
     refresh();
   }
 
-  // Esc passes on a word without scoring it
-  function skipWord() {
-    state.index += 1;
-    ensureQueue();
-    startWord();
-    refresh();
-  }
-
   function clearChord() {
     state.pressed.clear();
     state.chordBits = 0;
-    renderKeyboard();
+    renderChord();
   }
 
   // Keys are only taken over when they are steno keys. Everything else, and anything with
   // Ctrl, Alt or Meta held, passes through to the browser and the system untouched.
   document.addEventListener('keydown', (event) => {
     if (event.repeat || event.ctrlKey || event.altKey || event.metaKey) return;
-    if (event.code === 'Escape') {
-      skipWord();
-      return;
-    }
     const info = state.infoByCode.get(event.code);
     if (!info) return;
     event.preventDefault();
@@ -396,13 +406,13 @@
     }
     state.pressed.add(event.code);
     state.chordBits |= info.bits;
-    renderKeyboard();
+    renderChord();
   });
 
   document.addEventListener('keyup', (event) => {
     if (!state.pressed.delete(event.code)) return;
     if (state.pressed.size === 0) finishChord();
-    renderKeyboard();
+    renderChord();
   });
 
   window.addEventListener('blur', clearChord);

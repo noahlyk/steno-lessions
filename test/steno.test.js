@@ -69,6 +69,12 @@ test('buildWords keeps every stroke for a word and shows the one with fewest key
   assert.deepEqual(and.shown, ['-PB'], 'the two-key stroke is shown first');
 });
 
+test('displayName keeps the dash only where a letter has a left and a right key', () => {
+  const names = (list) => list.map(steno.displayName);
+  assert.deepEqual(names(['-E', 'A-', 'K-', 'W-', '-F', '*', '#']), ['E', 'A', 'K', 'W', 'F', '*', '#']);
+  assert.deepEqual(names(['S-', '-S', 'T-', '-T', 'R-', '-R', 'P-', '-P']), ['S-', '-S', 'T-', '-T', 'R-', '-R', 'P-', '-P']);
+});
+
 test('renderStroke writes a stroke bitmask in Plover notation', () => {
   for (const text of ['KAT', '-PB', 'TEFT', '#T', 'STKPWHR', '-FRPBLGTSDZ', '*', 'TK-PB', 'R-R']) {
     assert.equal(steno.renderStroke(steno.parseStroke(text)), text);

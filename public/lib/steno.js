@@ -134,5 +134,13 @@
     return `${number}${left}${!middle && right ? '-' : ''}${middle}${right}`;
   }
 
-  return { SLOTS, parseStroke, parseLayout, namesInBits, buildWords, popcount, renderStroke };
+  // The name shown for a steno key. Letters with one key show just the letter (E, A, K). S, T,
+  // R and P have a left and a right key, so they keep the dash that says which: S- and -S.
+  function displayName(name) {
+    const letter = name.replace(/-/g, '');
+    const keys = SLOTS.filter(([slotLetter]) => slotLetter === letter).length;
+    return keys > 1 ? name : letter;
+  }
+
+  return { SLOTS, parseStroke, parseLayout, namesInBits, buildWords, popcount, renderStroke, displayName };
 });
