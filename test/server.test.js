@@ -42,9 +42,9 @@ test('GET /api/data returns the layout and the words from the dictionary', async
   const body = await response.json();
   assert.equal(body.layout.slots.length, 23);
   const words = Object.fromEntries(body.words.map((word) => [word.text, word]));
-  assert.equal(words.cat.notation, 'KAT');
+  assert.deepEqual(words.cat.shown, ['KAT']);
   // user.json overrides main.json
-  assert.equal(words.an.notation, '-PB');
+  assert.deepEqual(words.an.shown, ['-PB']);
   assert.equal(words.and, undefined);
   // Capitalized entries are left out
   assert.equal(words.Test, undefined);

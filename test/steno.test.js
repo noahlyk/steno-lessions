@@ -53,7 +53,24 @@ test('buildWords keeps plain words and the shortest stroke for each', () => {
   ]);
   const byText = Object.fromEntries(words.map((word) => [word.text, word]));
   assert.deepEqual(Object.keys(byText).sort(), ['and', 'cat', 'example']);
-  assert.equal(byText.cat.notation, 'KAT');
-  assert.equal(byText.cat.strokes.length, 1);
-  assert.equal(byText.example.strokes.length, 2);
+  assert.deepEqual(byText.cat.shown, ['KAT']);
+  assert.deepEqual(byText.cat.variants[0], [steno.parseStroke('KAT')]);
+  assert.equal(byText.cat.variants.length, 2, 'KAT and KAT/-PB both type "cat"');
+  assert.deepEqual(byText.example.shown, ['KPA', 'TKAOEU']);
+});
+
+test('buildWords keeps every stroke for a word and shows the one with fewest keys', () => {
+  const words = steno.buildWords([
+    ['STK', 'and'],
+    ['-PB', 'and'],
+  ]);
+  const and = words[0];
+  assert.equal(and.variants.length, 2, 'both strokes are accepted');
+  assert.deepEqual(and.shown, ['-PB'], 'the two-key stroke is shown first');
+});
+
+test('renderStroke writes a stroke bitmask in Plover notation', () => {
+  for (const text of ['KAT', '-PB', 'TEFT', '#T', 'STKPWHR', '-FRPBLGTSDZ', '*', 'TK-PB', 'R-R']) {
+    assert.equal(steno.renderStroke(steno.parseStroke(text)), text);
+  }
 });

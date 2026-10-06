@@ -13,15 +13,13 @@ const words = steno.buildWords([
   ['TEFT', 'test'],
   ['STKPWHR', 'strength'],
   ['-PB', 'and'],
+  ['STK', 'and'],
   ['SA', 'sa'],
 ]);
 
-function learnedProgress(names) {
-  const progress = lessons.emptyProgress();
-  for (const name of names) {
-    for (let i = 0; i < 6; i++) {
-      lessons.recordChord(progress, [name], 600, true);
-    }
+function typeWords(progress, count, { ms = 1000, misses = 0 } = {}) {
+  for (let i = 0; i < count; i++) {
+    lessons.recordWord(progress, { ms, strokes: 1, misses });
   }
   return progress;
 }
@@ -39,24 +37,13 @@ test('normalize keeps good fields and drops damaged ones', () => {
   assert.deepEqual(lessons.normalize('nonsense'), lessons.emptyProgress());
   const progress = lessons.normalize({
     unlocked: 999,
-    lessons: -3,
-    keys: { 'A-': { samples: 2, ewmaMs: 900, misses: 1 }, 'NOPE': { samples: 9 } },
+    keys: { 'A-': { samples: 2, ewmaMs: 900, misses: 1 }, NOPE: { samples: 9 } },
+    words: [{ ms: 800, strokes: 2, misses: 0 }, { ms: 'x' }],
   });
   assert.equal(progress.unlocked, lessons.KEY_ORDER.length);
-  assert.equal(progress.lessons, 0);
   assert.deepEqual(progress.keys['A-'], { samples: 2, ewmaMs: 900, misses: 1 });
   assert.equal(progress.keys.NOPE, undefined);
-});
-
-test('confidence needs both enough samples and a fast enough time', () => {
-  const progress = lessons.emptyProgress();
-  assert.equal(lessons.confidence(progress, 'A-'), 0);
-  lessons.recordChord(progress, ['A-'], 600, true);
-  assert.ok(lessons.confidence(progress, 'A-') < 0.5, 'one sample is not enough');
-  for (let i = 0; i < 10; i++) lessons.recordChord(progress, ['A-'], 600, true);
-  assert.equal(lessons.confidence(progress, 'A-'), 1);
-  for (let i = 0; i < 20; i++) lessons.recordChord(progress, ['A-'], 4000, true);
-  assert.ok(lessons.confidence(progress, 'A-') < lessons.LEARNED, 'slow keys are not learned');
+  assert.deepEqual(progress.words, [{ ms: 800, strokes: 2, misses: 0 }]);
 });
 
 test('a miss slows a key down rather than counting as a sample', () => {
@@ -67,51 +54,86 @@ test('a miss slows a key down rather than counting as a sample', () => {
   assert.ok(progress.keys['T-'].ewmaMs > 500);
 });
 
-test('unlockIfReady adds one key only when every unlocked key is learned', () => {
-  const progress = learnedProgress(lessons.unlockedNames(lessons.emptyProgress()).slice(0, 5));
-  assert.equal(lessons.unlockIfReady(progress), false, 'the sixth key is not learned yet');
+test('the words-per-minute target rises from 30 to 50 as keys are added', () => {
+  assert.equal(lessons.wpmTarget(lessons.START_KEYS), 30);
+  assert.equal(lessons.wpmTarget(lessons.START_KEYS + 5), 40);
+  assert.equal(lessons.wpmTarget(lessons.KEY_ORDER.length), 50);
+});
 
-  const ready = learnedProgress(lessons.unlockedNames(lessons.emptyProgress()));
-  assert.equal(lessons.unlockIfReady(ready), true);
-  assert.equal(ready.unlocked, lessons.START_KEYS + 1);
+test('windowStats reports words per minute and accuracy over the newest words', () => {
+  const progress = typeWords(lessons.emptyProgress(), lessons.WORD_WINDOW, { ms: 1000 });
+  const stats = lessons.windowStats(progress);
+  assert.equal(stats.count, lessons.WORD_WINDOW);
+  assert.equal(Math.round(stats.wpm), 60);
+  assert.equal(stats.accuracy, 1);
+});
+
+test('a key unlocks only with enough fast, accurate words', () => {
+  // Too few words
+  assert.equal(lessons.canUnlock(typeWords(lessons.emptyProgress(), lessons.WORD_WINDOW - 1)), false);
+  // Fast enough but not accurate enough
+  assert.equal(lessons.canUnlock(typeWords(lessons.emptyProgress(), lessons.WORD_WINDOW, { misses: 1 })), false);
+  // Accurate but too slow: 12 words per minute
+  assert.equal(lessons.canUnlock(typeWords(lessons.emptyProgress(), lessons.WORD_WINDOW, { ms: 5000 })), false);
+  // Fast and accurate
+  assert.equal(lessons.canUnlock(typeWords(lessons.emptyProgress(), lessons.WORD_WINDOW)), true);
+});
+
+test('unlockIfReady adds one key and starts the word count again', () => {
+  const progress = typeWords(lessons.emptyProgress(), lessons.WORD_WINDOW);
+  assert.equal(lessons.unlockIfReady(progress), true);
+  assert.equal(progress.unlocked, lessons.START_KEYS + 1);
+  assert.deepEqual(progress.words, []);
+  assert.equal(lessons.unlockIfReady(progress), false);
 });
 
 test('focusKey is the unlocked key that needs the most practice', () => {
-  const progress = learnedProgress(lessons.unlockedNames(lessons.emptyProgress()));
+  const progress = lessons.emptyProgress();
+  for (const name of lessons.unlockedNames(progress)) {
+    for (let i = 0; i < 6; i++) lessons.recordChord(progress, [name], 600, true);
+  }
   lessons.recordChord(progress, ['S-'], 5000, false);
   assert.equal(lessons.focusKey(progress), 'S-');
 });
 
-test('pickLesson only uses words made from unlocked keys', () => {
+test('pickWords only uses words with a stroke made from unlocked keys', () => {
   const progress = lessons.emptyProgress();
-  const picked = lessons.pickLesson(words, progress, slotIndex, { random: () => 0.5, count: 10 });
+  const picked = lessons.pickWords(words, progress, slotIndex, { random: () => 0.5 });
   const mask = lessons.unlockedMask(progress, slotIndex);
   assert.ok(picked.length > 0);
   for (const word of picked) {
-    for (const bits of word.strokes) {
-      assert.equal(bits & ~mask, 0, `${word.text} only uses unlocked keys`);
-    }
+    assert.ok(lessons.usableVariants(word, mask).length > 0, `${word.text} is typeable`);
   }
   assert.ok(!picked.some((word) => word.text === 'strength'), 'needs keys not yet unlocked');
 });
 
-test('pickLesson returns distinct words and respects the count', () => {
-  const progress = learnedProgress(lessons.KEY_ORDER);
-  const picked = lessons.pickLesson(words, progress, slotIndex, { random: () => 0.3, count: 4 });
+test('a word counts if any of its strokes can be typed with unlocked keys', () => {
+  const and = words.find((word) => word.text === 'and');
+  assert.equal(and.variants.length, 2, 'Plover has two strokes for "and" here');
+  const mask = lessons.unlockedMask(lessons.emptyProgress(), slotIndex);
+  // STK uses only unlocked keys, -PB does not
+  assert.equal(lessons.usableVariants(and, mask).length, 1);
+});
+
+test('pickWords returns distinct words and respects the count', () => {
+  const progress = lessons.emptyProgress();
+  for (let i = lessons.START_KEYS; i < lessons.KEY_ORDER.length; i++) progress.unlocked = i + 1;
+  const picked = lessons.pickWords(words, progress, slotIndex, { random: () => 0.3, count: 4 });
   assert.equal(picked.length, 4);
   assert.equal(new Set(picked.map((word) => word.text)).size, 4);
 });
 
-test('pickLesson returns nothing when no word fits the unlocked keys', () => {
+test('pickWords returns nothing when no word fits the unlocked keys', () => {
   const progress = lessons.emptyProgress();
   progress.unlocked = 1;
   const strength = words.find((word) => word.text === 'strength');
-  assert.deepEqual(lessons.pickLesson([strength], progress, slotIndex), []);
+  assert.deepEqual(lessons.pickWords([strength], progress, slotIndex), []);
 });
 
-test('pickLesson skips the previous lesson words when it can', () => {
-  const progress = learnedProgress(lessons.KEY_ORDER);
+test('pickWords skips recently typed words when it can', () => {
+  const progress = lessons.emptyProgress();
+  for (let i = lessons.START_KEYS; i < lessons.KEY_ORDER.length; i++) progress.unlocked = i + 1;
   const avoid = ['cat', 'test', 'and'];
-  const picked = lessons.pickLesson(words, progress, slotIndex, { random: () => 0.1, count: 3, avoid });
+  const picked = lessons.pickWords(words, progress, slotIndex, { random: () => 0.1, count: 3, avoid });
   assert.ok(!picked.some((word) => avoid.includes(word.text)));
 });

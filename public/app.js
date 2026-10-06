@@ -1,12 +1,12 @@
-// The practice page. A stroke is a chord: hold every key for it at once, then release.
-// The chord is scored when the last key comes up, so the keys can land in any order.
+// The practice page. You type on your normal keyboard, with no steno mode: hold every key
+// for a stroke at once, then release. The chord is scored when the last key comes up, so the
+// keys can land in any order. Any stroke Plover maps to the word is accepted.
 (function () {
   const S = window.StenoData;
   const L = window.StenoLessons;
 
-  // The full keyboard, row by row. `label` is the key's main character, which is also the
-  // label keymux's layout uses for steno keys. `shift` is the character shown when Shift is
-  // held. Keys with a `code` are named keys (Shift, Tab, ...) with no steno meaning.
+  // The full keyboard, row by row. `label` is the key's main character. `shift` is the
+  // character shown when Shift is held. Keys with a `code` are named keys (Shift, Tab, ...).
   const letter = (label) => ({ label });
   const sym = (label, shift) => ({ label, shift });
   const named = (label, code, width) => ({ label, code, width });
@@ -24,7 +24,7 @@
       named('Space', 'Space', 'w6'), named('Alt', 'AltRight', 'w15'), named('Ctrl', 'ControlRight', 'w15')],
   ];
 
-  // Which finger presses each key, for coloring the steno keys like the reference layout.
+  // Which finger presses each key, for coloring the steno keys.
   const FINGERS = {
     'left-pinky': ['Backquote', 'Digit1', 'Tab', 'KeyQ', 'CapsLock', 'KeyA', 'ShiftLeft', 'KeyZ', 'ControlLeft'],
     'left-ring': ['Digit2', 'KeyW', 'KeyS', 'KeyX', 'AltLeft'],
@@ -62,42 +62,30 @@
     infoByCode: new Map(), // event.code -> { bits, sound, combined, label }
     slotByName: new Map(), // "S-" -> { name, sound, label }
     keyEls: new Map(), // event.code -> element
-    lesson: [],
-    lessonNumber: 1,
-    lastWords: [],
-    wordIdx: 0,
+    queue: [], // words in the stream, oldest first
+    index: 0, // the word being typed
+    recent: [], // words used lately, so the stream does not repeat them
+    candidates: [], // stroke sequences still possible for the current word
     strokeIdx: 0,
-    lessonStart: 0,
-    lessonCorrect: 0,
-    lessonMisses: 0,
-    summaryOpen: false,
+    wordMisses: 0,
+    wordStart: null,
+    typed: 0, // words finished this session
     pressed: new Set(),
     chordBits: 0,
     chordStart: 0,
   };
 
-  function currentWord() {
-    return state.lesson[state.wordIdx];
-  }
-
-  function currentStroke() {
-    const word = currentWord();
-    return word ? word.strokes[state.strokeIdx] : 0;
-  }
-
-  function unlockedMask() {
-    return L.unlockedMask(state.progress, state.slotIndex);
-  }
+  const currentWord = () => state.queue[state.index];
+  // The stroke sequence to show: the first one that is still possible
+  const shownStrokes = () => state.candidates[0] || [];
+  const currentStroke = () => shownStrokes()[state.strokeIdx] || 0;
+  const unlockedMask = () => L.unlockedMask(state.progress, state.slotIndex);
+  const namesOf = (bits) => S.namesInBits(bits).join(' ') || 'nothing';
 
   function setFeedback(text, kind) {
     const el = $('feedback');
     el.textContent = text;
     el.className = `feedback${kind ? ` ${kind}` : ''}`;
-  }
-
-  function soundOfBits(bits) {
-    return S.namesInBits(bits)
-      .map((name) => ({ name, sound: state.slotByName.get(name)?.sound || '' }));
   }
 
   function buildIndexes(layout) {
@@ -114,6 +102,23 @@
     }
   }
 
+  // The physical keys to press for a stroke, using combined keys where they fit, so the
+  // hint reads like the chord on the keyboard (e.g. "V" for A- and O-).
+  function keysFor(bits) {
+    const keys = state.data.layout.keys
+      .filter((key) => key.bits && (key.bits & ~bits) === 0)
+      .sort((a, b) => S.popcount(b.bits) - S.popcount(a.bits));
+    let remaining = bits;
+    const labels = [];
+    for (const key of keys) {
+      if (remaining & key.bits) {
+        labels.push(key.label);
+        remaining &= ~key.bits;
+      }
+    }
+    return labels;
+  }
+
   function buildKeyboard() {
     const keyboard = $('keyboard');
     keyboard.textContent = '';
@@ -126,24 +131,30 @@
         el.className = 'key';
         el.dataset.code = code;
         if (key.width) el.classList.add(key.width);
-        if (key.shift) {
-          const shift = document.createElement('span');
-          shift.className = 'shift';
-          shift.textContent = key.shift;
-          el.appendChild(shift);
-        }
-        const main = document.createElement('span');
-        main.className = 'main';
-        main.textContent = key.label;
-        el.appendChild(main);
         if (fingerByCode.has(code)) el.dataset.finger = fingerByCode.get(code);
         if (HOME_ROW.has(code)) el.classList.add('home');
         const info = state.infoByCode.get(code);
         if (info) {
-          const sound = document.createElement('span');
-          sound.className = 'sound';
-          sound.textContent = info.sound;
-          el.appendChild(sound);
+          // Steno keys show the sound big, and the letter small in the corner
+          const letterEl = document.createElement('span');
+          letterEl.className = 'letter';
+          letterEl.textContent = info.label;
+          el.appendChild(letterEl);
+          const main = document.createElement('span');
+          main.className = 'main sound';
+          main.textContent = info.sound.replace(/ \+ /g, '+');
+          el.appendChild(main);
+        } else {
+          if (key.shift) {
+            const shift = document.createElement('span');
+            shift.className = 'shift';
+            shift.textContent = key.shift;
+            el.appendChild(shift);
+          }
+          const main = document.createElement('span');
+          main.className = 'main';
+          main.textContent = key.label;
+          el.appendChild(main);
         }
         state.keyEls.set(code, el);
         row.appendChild(el);
@@ -164,35 +175,82 @@
     }
   }
 
-  function renderWord() {
+  // The word stream: keep at least 20 words ahead of the word being typed.
+  function ensureQueue() {
+    while (state.queue.length - state.index < 20) {
+      const picks = L.pickWords(state.data.words, state.progress, state.slotIndex, { avoid: state.recent });
+      if (picks.length === 0) break;
+      state.queue.push(...picks);
+      state.recent.push(...picks.map((word) => word.text));
+      state.recent.splice(0, Math.max(0, state.recent.length - 60));
+    }
+    // Forget words well behind, so the page stays light
+    const drop = state.index - 40;
+    if (drop > 0) {
+      state.queue.splice(0, drop);
+      state.index -= drop;
+    }
+  }
+
+  function startWord() {
     const word = currentWord();
-    $('word').textContent = word ? word.text : '';
-    $('word-count').textContent = word ? `word ${state.wordIdx + 1} of ${state.lesson.length}` : '';
-    $('lesson-label').textContent = `Lesson ${state.lessonNumber}`;
+    state.candidates = word ? word.variants.slice() : [];
+    state.strokeIdx = 0;
+    state.wordMisses = 0;
+    state.wordStart = null;
+  }
 
-    const strokes = $('strokes');
-    strokes.textContent = '';
-    if (word) {
-      word.notation.split('/').forEach((notation, index) => {
-        const chip = document.createElement('span');
-        chip.className = 'stroke-chip';
-        if (index < state.strokeIdx) chip.classList.add('done');
-        if (index === state.strokeIdx) chip.classList.add('current');
-        chip.textContent = notation;
-        strokes.appendChild(chip);
-      });
-    }
-
-    const sounds = $('sounds');
-    sounds.textContent = '';
-    const target = currentStroke();
-    if (target) {
-      for (const { name, sound } of soundOfBits(target)) {
-        const span = document.createElement('span');
-        span.innerHTML = `<b>${escapeHtml(name)}</b> ${escapeHtml(sound)}`;
-        sounds.appendChild(span);
+  // Shows about 25 words, with the one being typed on the second line, like a typing test.
+  function renderStream() {
+    const stream = $('stream');
+    stream.textContent = '';
+    const from = Math.max(0, state.index - 30);
+    const to = Math.min(state.queue.length, state.index + 25);
+    let current = null;
+    for (let i = from; i < to; i++) {
+      const span = document.createElement('span');
+      span.className = 'w';
+      if (i < state.index) span.classList.add('done');
+      if (i === state.index) {
+        span.classList.add('current');
+        current = span;
       }
+      span.textContent = state.queue[i].text;
+      stream.appendChild(span);
+      stream.append(' ');
     }
+    if (current) {
+      const lineHeight = parseFloat(getComputedStyle(stream).lineHeight) || 40;
+      stream.scrollTop = Math.max(0, current.offsetTop - lineHeight);
+    }
+  }
+
+  function renderStrokes() {
+    const box = $('strokes');
+    box.textContent = '';
+    shownStrokes().forEach((bits, index) => {
+      const chip = document.createElement('span');
+      chip.className = 'stroke-chip';
+      if (index < state.strokeIdx) chip.classList.add('done');
+      if (index === state.strokeIdx) chip.classList.add('current');
+      chip.textContent = S.renderStroke(bits);
+      box.appendChild(chip);
+    });
+  }
+
+  function renderStrokeHint() {
+    const sounds = $('sounds');
+    const press = $('press');
+    sounds.textContent = '';
+    press.textContent = '';
+    const target = currentStroke();
+    if (!target) return;
+    for (const name of S.namesInBits(target)) {
+      const span = document.createElement('span');
+      span.innerHTML = `<b>${escapeHtml(name)}</b> ${escapeHtml(state.slotByName.get(name)?.sound || '')}`;
+      sounds.appendChild(span);
+    }
+    press.textContent = `press ${keysFor(target).join(' + ')}`;
   }
 
   function renderKeyList() {
@@ -200,8 +258,7 @@
     list.textContent = '';
     L.KEY_ORDER.forEach((name, index) => {
       const item = document.createElement('li');
-      const unlocked = index < state.progress.unlocked;
-      item.classList.toggle('locked', !unlocked);
+      item.classList.toggle('locked', index >= state.progress.unlocked);
       const confidence = L.confidence(state.progress, name);
       const slot = state.slotByName.get(name);
       item.innerHTML =
@@ -214,115 +271,27 @@
 
   function renderStats() {
     const { progress } = state;
-    const total = state.lessonCorrect + state.lessonMisses;
-    const minutes = state.lessonStart ? (performance.now() - state.lessonStart) / 60000 : 0;
-    const speed = minutes > 0.02 ? Math.round(state.lessonCorrect / minutes) : 0;
-    const accuracy = total ? Math.round((state.lessonCorrect / total) * 100) : 100;
+    const stats = L.windowStats(progress);
+    const wpm = stats.count ? Math.round(stats.wpm) : '—';
+    const accuracy = stats.count ? Math.round(stats.accuracy * 100) : 100;
+    const target = L.wpmTarget(progress.unlocked);
+    const need = Math.round(L.ACCURACY_TARGET * 100);
     $('stats').innerHTML =
       `<span>keys <strong>${progress.unlocked}</strong> of ${L.KEY_ORDER.length}</span>` +
-      `<span>strokes/min <strong>${speed}</strong></span>` +
-      `<span>accuracy <strong>${accuracy}%</strong></span>` +
-      `<span>words <strong>${state.data.words.length}</strong></span>`;
+      `<span>wpm <strong>${wpm}</strong> <small>need ${target}</small></span>` +
+      `<span>accuracy <strong>${accuracy}%</strong> <small>need ${need}%</small></span>` +
+      `<span>words <strong>${state.typed}</strong></span>`;
+    $('window-note').textContent =
+      `${stats.count} of ${L.WORD_WINDOW} words counted toward the next key`;
   }
 
   function refresh() {
-    renderWord();
+    renderStream();
+    renderStrokes();
+    renderStrokeHint();
     renderKeyboard();
     renderKeyList();
     renderStats();
-  }
-
-  function startLesson() {
-    const words = L.pickLesson(state.data.words, state.progress, state.slotIndex, {
-      avoid: state.lastWords,
-    });
-    if (words.length === 0) {
-      setFeedback('No words can be made from the keys so far. Check the dictionary in your keymux config.', 'bad');
-      return;
-    }
-    state.lesson = words;
-    state.lastWords = words.map((word) => word.text);
-    state.wordIdx = 0;
-    state.strokeIdx = 0;
-    state.lessonStart = performance.now();
-    state.lessonCorrect = 0;
-    state.lessonMisses = 0;
-    state.lessonNumber = state.progress.lessons + 1;
-    state.summaryOpen = false;
-    $('summary').hidden = true;
-    setFeedback('Hold every key for the stroke at once, then release.');
-    refresh();
-  }
-
-  function finishChord() {
-    const word = currentWord();
-    if (!word) return;
-    const target = word.strokes[state.strokeIdx];
-    const ms = performance.now() - state.chordStart;
-    const correct = state.chordBits === target;
-    L.recordChord(state.progress, S.namesInBits(target), ms, correct);
-
-    if (correct) {
-      state.lessonCorrect += 1;
-      state.strokeIdx += 1;
-      setFeedback(`Good, ${Math.round(ms)} ms`, 'good');
-      if (state.strokeIdx >= word.strokes.length) {
-        wordDone();
-        return;
-      }
-    } else {
-      state.lessonMisses += 1;
-      const typed = S.namesInBits(state.chordBits).join(' ') || 'nothing';
-      const wanted = S.namesInBits(target).join(' ');
-      setFeedback(`You pressed ${typed}. The stroke needs ${wanted}.`, 'bad');
-    }
-    refresh();
-  }
-
-  function wordDone() {
-    state.wordIdx += 1;
-    state.strokeIdx = 0;
-    if (state.wordIdx >= state.lesson.length) {
-      lessonDone();
-      return;
-    }
-    saveProgress();
-    refresh();
-  }
-
-  function lessonDone() {
-    const { progress } = state;
-    progress.lessons += 1;
-    const unlockedNow = L.unlockIfReady(progress);
-    const total = state.lessonCorrect + state.lessonMisses;
-    const minutes = (performance.now() - state.lessonStart) / 60000;
-    const speed = minutes > 0 ? Math.round(state.lessonCorrect / minutes) : 0;
-    const accuracy = total ? Math.round((state.lessonCorrect / total) * 100) : 100;
-
-    let unlockText = 'Keep practicing these keys to unlock the next one.';
-    if (unlockedNow) {
-      const name = L.KEY_ORDER[progress.unlocked - 1];
-      const sound = state.slotByName.get(name)?.sound || '';
-      unlockText = `New key unlocked: ${name} (sound ${sound}).`;
-    }
-
-    $('summary-title').textContent = `Lesson ${state.lessonNumber} complete`;
-    $('summary-body').textContent =
-      `${speed} strokes per minute, ${accuracy}% accurate. ${unlockText}`;
-    $('summary').hidden = false;
-    state.summaryOpen = true;
-    saveProgress();
-    refresh();
-  }
-
-  function skipWord() {
-    state.wordIdx += 1;
-    state.strokeIdx = 0;
-    if (state.wordIdx >= state.lesson.length) {
-      lessonDone();
-      return;
-    }
-    refresh();
   }
 
   async function saveProgress() {
@@ -339,35 +308,84 @@
     }
   }
 
+  function finishChord() {
+    if (!currentWord()) return;
+    const chord = state.chordBits;
+    const ms = performance.now() - state.chordStart;
+    const matches = state.candidates.filter((strokes) => strokes[state.strokeIdx] === chord);
+
+    if (matches.length === 0) {
+      // Score the miss against the stroke shown
+      const target = currentStroke();
+      state.wordMisses += 1;
+      L.recordChord(state.progress, S.namesInBits(target), ms, false);
+      setFeedback(
+        `You pressed ${namesOf(chord)}. The stroke needs ${S.renderStroke(target)} (${namesOf(target)}).`,
+        'bad',
+      );
+      refresh();
+      return;
+    }
+
+    L.recordChord(state.progress, S.namesInBits(chord), ms, true);
+    state.candidates = matches;
+    state.strokeIdx += 1;
+    setFeedback(`Good, ${Math.round(ms)} ms`, 'good');
+    if (matches.some((strokes) => strokes.length === state.strokeIdx)) {
+      wordDone();
+    } else {
+      refresh();
+    }
+  }
+
+  function wordDone() {
+    const ms = performance.now() - (state.wordStart ?? performance.now());
+    L.recordWord(state.progress, { ms, strokes: state.strokeIdx, misses: state.wordMisses });
+    state.typed += 1;
+    if (L.unlockIfReady(state.progress)) {
+      const name = L.KEY_ORDER[state.progress.unlocked - 1];
+      const sound = state.slotByName.get(name)?.sound || '';
+      setFeedback(
+        `New key unlocked: ${name} (sound ${sound}). The next one needs ${L.wpmTarget(state.progress.unlocked)} wpm.`,
+        'good',
+      );
+    }
+    state.index += 1;
+    ensureQueue();
+    startWord();
+    saveProgress();
+    refresh();
+  }
+
+  // Esc passes on a word without scoring it
+  function skipWord() {
+    state.index += 1;
+    ensureQueue();
+    startWord();
+    refresh();
+  }
+
   function clearChord() {
     state.pressed.clear();
     state.chordBits = 0;
     renderKeyboard();
   }
 
+  // Keys are only taken over when they are steno keys. Everything else, and anything with
+  // Ctrl, Alt or Meta held, passes through to the browser and the system untouched.
   document.addEventListener('keydown', (event) => {
-    if (event.repeat) return;
-    if (state.summaryOpen) {
-      if (event.code === 'Enter' || event.code === 'Space') {
-        event.preventDefault();
-        state.summaryOpen = false;
-        startLesson();
-      }
-      return;
-    }
+    if (event.repeat || event.ctrlKey || event.altKey || event.metaKey) return;
     if (event.code === 'Escape') {
       skipWord();
       return;
     }
     const info = state.infoByCode.get(event.code);
-    if (!info) {
-      if (event.code === 'Space') event.preventDefault();
-      return;
-    }
+    if (!info) return;
     event.preventDefault();
     if (state.pressed.size === 0) {
       state.chordBits = 0;
       state.chordStart = performance.now();
+      if (state.wordStart === null) state.wordStart = state.chordStart;
     }
     state.pressed.add(event.code);
     state.chordBits |= info.bits;
@@ -382,11 +400,6 @@
 
   window.addEventListener('blur', clearChord);
 
-  $('next-lesson').addEventListener('click', () => {
-    state.summaryOpen = false;
-    startLesson();
-  });
-
   async function getJson(url) {
     const response = await fetch(url);
     const body = await response.json();
@@ -400,7 +413,6 @@
     } catch (error) {
       $('error').hidden = false;
       $('error').textContent = `Could not load steno data: ${error.message}`;
-      $('word').textContent = '—';
       return;
     }
     try {
@@ -412,7 +424,9 @@
     }
     buildIndexes(state.data.layout);
     buildKeyboard();
-    startLesson();
+    ensureQueue();
+    startWord();
+    refresh();
   }
 
   init();

@@ -155,6 +155,31 @@ main {
 .feedback.good { color: var(--good); }
 .feedback.bad { color: var(--bad); }
 
+/* Word stream: about 25 words, the one being typed on the second line, scrolling as you go */
+.stream {
+  position: relative;
+  height: calc(2.2em * 3);
+  overflow: hidden;
+  font: 500 26px/2.2 system-ui, -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: 0.01em;
+  text-align: left;
+}
+
+.stream .w { color: var(--ink); border-radius: 4px; padding: 0 2px; }
+.stream .w.done { color: var(--muted); opacity: 0.5; }
+.stream .w.current { background: var(--steno); color: var(--steno-ink); }
+
+.stroke-line {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  margin-top: 16px;
+  min-height: 90px;
+}
+
+.press { color: var(--muted); font-size: 14px; }
+.window-note { margin-top: 10px; text-align: center; color: var(--muted); font-size: 13px; }
+
 .keyboard-wrap { display: grid; gap: 10px; justify-items: center; }
 
 .keyboard {
@@ -207,6 +232,18 @@ main {
 }
 
 .key .main { font-size: 15px; line-height: 1; }
+
+/* On steno keys the sound is the big label and the letter you press is small in the corner */
+.key .letter {
+  position: absolute;
+  top: 3px;
+  left: 5px;
+  font-size: 9px;
+  line-height: 1;
+  opacity: 0.6;
+}
+
+.key.steno .main.sound { font-size: 19px; font-weight: 700; }
 
 .key.home::after {
   content: "";

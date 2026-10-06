@@ -81,23 +81,58 @@
     return names;
   }
 
-  // Builds one entry per English word from Plover-style `{stroke: text}` pairs. Keeps the
-  // shortest stroke sequence for each word. Only plain lowercase words are kept, so
-  // proper nouns, punctuation and {^suffix} entries are left out.
+  const MAX_STROKES = 3;
+
+  function popcount(bits) {
+    let count = 0;
+    for (let rest = bits; rest; rest &= rest - 1) count += 1;
+    return count;
+  }
+
+  // Builds one entry per English word from Plover-style `{stroke: text}` pairs. Plover
+  // usually has several strokes for one word, and any of them should count, so every
+  // stroke sequence is kept in `variants`. `shown` is the one to display: fewest strokes,
+  // then fewest keys, the same choice `keymux steno keys` makes. Only plain lowercase
+  // words are kept, so proper nouns, punctuation and {^suffix} entries are left out.
   function buildWords(entries) {
-    const best = new Map();
+    const byText = new Map();
     for (const [key, text] of entries) {
       if (typeof text !== 'string' || !/^[a-z]{1,12}$/.test(text)) continue;
       const parts = key.split('/');
+      if (parts.length > MAX_STROKES) continue;
       const strokes = parts.map(parseStroke);
       if (strokes.some((bits) => bits === null)) continue;
-      const previous = best.get(text);
-      if (!previous || strokes.length < previous.strokes.length) {
-        best.set(text, { text, strokes, notation: parts.join('/') });
-      }
+      if (!byText.has(text)) byText.set(text, new Map());
+      byText.get(text).set(key, strokes);
     }
-    return [...best.values()].sort((a, b) => a.text.localeCompare(b.text));
+    return [...byText]
+      .map(([text, sequences]) => {
+        const ranked = [...sequences].map(([notation, strokes]) => ({
+          notation,
+          strokes,
+          keys: strokes.reduce((total, bits) => total + popcount(bits), 0),
+        })).sort((a, b) =>
+          a.strokes.length - b.strokes.length || a.keys - b.keys || (a.notation < b.notation ? -1 : 1));
+        return {
+          text,
+          shown: ranked[0].notation.split('/'),
+          variants: ranked.map((item) => item.strokes),
+        };
+      })
+      .sort((a, b) => a.text.localeCompare(b.text));
   }
 
-  return { SLOTS, parseStroke, parseLayout, namesInBits, buildWords };
+  // Plover notation for a stroke mask, the reverse of parseStroke. Mirrors render_stroke in
+  // keymux: a dash marks right-hand keys when there is no vowel or star before them.
+  function renderStroke(bits) {
+    const letters = (from, to) =>
+      SLOTS.slice(from, to).map(([letter], i) => (bits & (1 << (from + i)) ? letter : '')).join('');
+    const left = letters(0, LEFT_END);
+    const middle = letters(LEFT_END, 12);
+    const right = letters(12, NUMBER_SLOT);
+    const number = bits & (1 << NUMBER_SLOT) ? '#' : '';
+    return `${number}${left}${!middle && right ? '-' : ''}${middle}${right}`;
+  }
+
+  return { SLOTS, parseStroke, parseLayout, namesInBits, buildWords, popcount, renderStroke };
 });
