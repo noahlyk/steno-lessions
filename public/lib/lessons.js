@@ -18,8 +18,9 @@
   const START_KEYS = 6;
   // Words added to the stream at a time.
   const BATCH_WORDS = 25;
-  // Completed words used to judge speed and accuracy before a key can unlock.
-  const WORD_WINDOW = 25;
+  // Completed words used to judge speed and accuracy before a key can unlock. A moving window:
+  // only the newest words count, and the history is cleared on each unlock.
+  const WORD_WINDOW = 40;
   // Share of strokes that must be right on the first try.
   const ACCURACY_TARGET = 0.95;
   // Completed words kept in the history. Only the newest WORD_WINDOW matter for unlocking.

@@ -42,8 +42,8 @@ Steno keys show the sound big, with the letter you press small in the corner. Ke
 ## How keys unlock
 
 - You start with 6 keys: `E`, `A`, `T`, `S`, `K` and `-T`. Keys are then introduced in the order in `public/lib/lessons.js` (`KEY_ORDER`).
-- The next key unlocks when your newest 25 words are both fast and accurate:
-  - Speed starts at 30 words per minute and rises to 50 as keys are added.
+- The next key unlocks when your newest 40 words are both fast and accurate:
+  - Speed starts at 30 words per minute and rises to 50 as keys are added. Each word's time counts only active typing: pauses longer than 3 seconds, and time with the page hidden or unfocused, are left out.
   - Accuracy must be at least 95% of strokes on the first try.
 - After a key unlocks, the word count starts again from zero.
 

@@ -84,7 +84,8 @@
     candidates: [], // stroke sequences still possible for the current word
     strokeIdx: 0,
     wordMisses: 0,
-    wordStart: null,
+    wordMs: 0,
+    lastChordEnd: null,
     typed: 0, // words finished this session
     pressed: new Set(),
     chordBits: 0,
@@ -216,7 +217,8 @@
     state.candidates = word ? L.displayVariants(word, unlockedMask()) : [];
     state.strokeIdx = 0;
     state.wordMisses = 0;
-    state.wordStart = null;
+    state.wordMs = 0;
+    state.lastChordEnd = null;
   }
 
   // The word stream. Each word is a column, with its sounds and keys directly under it, so the
@@ -338,10 +340,22 @@
     }
   }
 
+  // A pause between chords longer than this is not typing, so it is left out of the word's time (ms)
+  const IDLE_MS = 3000;
+
   function finishChord() {
     if (!currentWord()) return;
     const chord = state.chordBits;
-    const ms = performance.now() - state.chordStart;
+    const now = performance.now();
+    const ms = now - state.chordStart;
+    // Word time is active typing only: the hold, plus the pause before it if the pause was
+    // short. A longer pause, or time with the page unfocused, is not counted.
+    if (state.lastChordEnd !== null) {
+      const pause = state.chordStart - state.lastChordEnd;
+      if (pause <= IDLE_MS) state.wordMs += pause;
+    }
+    state.wordMs += ms;
+    state.lastChordEnd = now;
     const matches = state.candidates.filter((strokes) => strokes[state.strokeIdx] === chord);
 
     if (matches.length === 0) {
@@ -369,8 +383,7 @@
   }
 
   function wordDone() {
-    const ms = performance.now() - (state.wordStart ?? performance.now());
-    L.recordWord(state.progress, { ms, strokes: state.strokeIdx, misses: state.wordMisses });
+    L.recordWord(state.progress, { ms: state.wordMs, strokes: state.strokeIdx, misses: state.wordMisses });
     state.typed += 1;
     if (L.unlockIfReady(state.progress)) {
       const name = L.KEY_ORDER[state.progress.unlocked - 1];
@@ -387,9 +400,11 @@
     refresh();
   }
 
+  // Drops the chord being typed and stops the word clock, so time away from the page is not counted
   function clearChord() {
     state.pressed.clear();
     state.chordBits = 0;
+    state.lastChordEnd = null;
     renderChord();
   }
 
@@ -403,7 +418,6 @@
     if (state.pressed.size === 0) {
       state.chordBits = 0;
       state.chordStart = performance.now();
-      if (state.wordStart === null) state.wordStart = state.chordStart;
     }
     state.pressed.add(event.code);
     state.chordBits |= info.bits;
@@ -417,6 +431,7 @@
   });
 
   window.addEventListener('blur', clearChord);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) clearChord(); });
 
   async function getJson(url) {
     const response = await fetch(url);
