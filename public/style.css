@@ -168,14 +168,14 @@ main {
   overflow-x: auto;
 }
 
+.keyboard { --u: 46px; }
+
 .kb-row { display: flex; gap: 6px; justify-content: center; }
-.kb-row.offset-1 { padding-left: 26px; }
-.kb-row.offset-2 { padding-left: 46px; }
 
 .key {
   position: relative;
-  width: 46px;
-  height: 52px;
+  width: var(--u);
+  height: 50px;
   flex: 0 0 auto;
   border-radius: 8px;
   border: 1px solid var(--line);
@@ -190,8 +190,36 @@ main {
   transition: background 0.08s, color 0.08s, transform 0.08s;
 }
 
-.key.wide { width: 74px; }
-.key.space { width: 260px; }
+.key.w15 { width: calc(var(--u) * 1.5); }
+.key.w175 { width: calc(var(--u) * 1.75); }
+.key.w2 { width: calc(var(--u) * 2); }
+.key.w225 { width: calc(var(--u) * 2.25); }
+.key.w25 { width: calc(var(--u) * 2.5); }
+.key.w6 { width: calc(var(--u) * 6); }
+
+.key .shift {
+  position: absolute;
+  top: 3px;
+  left: 5px;
+  font-size: 11px;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.key .main { font-size: 15px; line-height: 1; }
+
+.key.home::after {
+  content: "";
+  position: absolute;
+  bottom: 13px;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.6;
+}
 
 .key .sound {
   position: absolute;
@@ -205,12 +233,19 @@ main {
   opacity: 0.85;
 }
 
+/* Steno keys take the color of the finger that presses them. Other keys stay gray. */
 .key.steno {
-  background: var(--steno);
-  color: var(--steno-ink);
+  background: var(--finger, var(--steno));
+  color: #1d1d1b;
   border-color: transparent;
   font-weight: 600;
 }
+
+.key.steno[data-finger="left-pinky"], .key.steno[data-finger="right-pinky"] { --finger: #b9a2d8; }
+.key.steno[data-finger="left-ring"], .key.steno[data-finger="right-ring"] { --finger: #a4c27a; }
+.key.steno[data-finger="left-middle"], .key.steno[data-finger="right-middle"] { --finger: #e0a866; }
+.key.steno[data-finger="left-index"], .key.steno[data-finger="right-index"] { --finger: #d8cb6a; }
+.key.steno[data-finger="thumb"] { --finger: #c98a8a; }
 
 .key.locked {
   background: var(--locked);
@@ -219,11 +254,14 @@ main {
   font-weight: 400;
 }
 
+.key.locked.steno { opacity: 0.4; }
+
 .key.target {
   background: var(--target);
   color: var(--target-ink);
   border-color: transparent;
   transform: translateY(-2px);
+  box-shadow: 0 0 0 4px rgba(59, 142, 224, 0.35);
 }
 
 .key.down {
@@ -252,7 +290,7 @@ main {
   margin-right: 4px;
   border: 1px solid var(--line);
 }
-.swatch.steno { background: var(--steno); border-color: transparent; }
+.swatch.steno { background: #d8cb6a; border-color: transparent; }
 .swatch.locked { background: var(--locked); border-style: dashed; }
 .swatch.target { background: var(--target); border-color: transparent; }
 .swatch.down { background: var(--down); border-color: transparent; }
@@ -330,13 +368,11 @@ kbd {
 }
 
 @media (max-width: 640px) {
-  .key { width: 30px; height: 40px; font-size: 13px; }
-  .key.wide { width: 46px; }
-  .key.space { width: 180px; }
-  .key .sound { font-size: 8px; }
-  .kb-row { gap: 4px; }
-  .kb-row.offset-1 { padding-left: 14px; }
-  .kb-row.offset-2 { padding-left: 24px; }
-  .keyboard { padding: 10px; }
+  .keyboard { --u: 27px; padding: 10px; }
+  .key { height: 38px; }
+  .key .main { font-size: 12px; }
+  .key .shift { font-size: 8px; left: 3px; top: 2px; }
+  .key .sound { font-size: 7px; }
+  .kb-row { gap: 3px; }
   main { padding-left: 16px; padding-right: 16px; }
 }

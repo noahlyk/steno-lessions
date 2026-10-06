@@ -4,13 +4,43 @@
   const S = window.StenoData;
   const L = window.StenoLessons;
 
-  // The physical keys drawn on the keyboard, row by row, using the labels keymux's layout uses.
+  // The full keyboard, row by row. `label` is the key's main character, which is also the
+  // label keymux's layout uses for steno keys. `shift` is the character shown when Shift is
+  // held. Keys with a `code` are named keys (Shift, Tab, ...) with no steno meaning.
+  const letter = (label) => ({ label });
+  const sym = (label, shift) => ({ label, shift });
+  const named = (label, code, width) => ({ label, code, width });
   const ROWS = [
-    { keys: ['`', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '='], offset: 0 },
-    { keys: ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '[', ']', '\\'], offset: 1 },
-    { keys: ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ';', "'"], offset: 2 },
-    { keys: ['Z', 'X', 'C', 'V', 'B', 'N', 'M', ',', '.', '/'], offset: 0 },
+    [sym('`', '~'), sym('1', '!'), sym('2', '@'), sym('3', '#'), sym('4', '$'), sym('5', '%'),
+      sym('6', '^'), sym('7', '&'), sym('8', '*'), sym('9', '('), sym('0', ')'), sym('-', '_'),
+      sym('=', '+'), named('Backspace', 'Backspace', 'w2')],
+    [named('Tab', 'Tab', 'w15'), ...'QWERTYUIOP'.split('').map(letter), sym('[', '{'), sym(']', '}'),
+      sym('\\', '|', 'w15')],
+    [named('Caps Lock', 'CapsLock', 'w175'), ...'ASDFGHJKL'.split('').map(letter), sym(';', ':'),
+      sym("'", '"'), named('Enter', 'Enter', 'w2')],
+    [named('Shift', 'ShiftLeft', 'w225'), ...'ZXCVBNM'.split('').map(letter), sym(',', '<'),
+      sym('.', '>'), sym('/', '?'), named('Shift', 'ShiftRight', 'w25')],
+    [named('Ctrl', 'ControlLeft', 'w15'), named('Alt', 'AltLeft', 'w15'),
+      named('Space', 'Space', 'w6'), named('Alt', 'AltRight', 'w15'), named('Ctrl', 'ControlRight', 'w15')],
   ];
+
+  // Which finger presses each key, for coloring the steno keys like the reference layout.
+  const FINGERS = {
+    'left-pinky': ['Backquote', 'Digit1', 'Tab', 'KeyQ', 'CapsLock', 'KeyA', 'ShiftLeft', 'KeyZ', 'ControlLeft'],
+    'left-ring': ['Digit2', 'KeyW', 'KeyS', 'KeyX', 'AltLeft'],
+    'left-middle': ['Digit3', 'KeyE', 'KeyD', 'KeyC'],
+    'left-index': ['Digit4', 'Digit5', 'KeyR', 'KeyT', 'KeyF', 'KeyG', 'KeyV', 'KeyB'],
+    'right-index': ['Digit6', 'Digit7', 'KeyY', 'KeyU', 'KeyH', 'KeyJ', 'KeyN', 'KeyM'],
+    'right-middle': ['Digit8', 'KeyI', 'KeyK', 'Comma'],
+    'right-ring': ['Digit9', 'KeyO', 'KeyL', 'Period'],
+    'right-pinky': ['Digit0', 'Minus', 'Equal', 'Backspace', 'KeyP', 'BracketLeft', 'BracketRight',
+      'Backslash', 'Semicolon', 'Quote', 'Enter', 'Slash', 'ShiftRight', 'ControlRight', 'AltRight'],
+    thumb: ['Space'],
+  };
+  const fingerByCode = new Map(
+    Object.entries(FINGERS).flatMap(([finger, codes]) => codes.map((code) => [code, finger])),
+  );
+  const HOME_ROW = new Set(['KeyF', 'KeyJ']);
   const PUNCTUATION = {
     '`': 'Backquote', '-': 'Minus', '=': 'Equal', '[': 'BracketLeft', ']': 'BracketRight',
     '\\': 'Backslash', ';': 'Semicolon', "'": 'Quote', ',': 'Comma', '.': 'Period', '/': 'Slash',
@@ -87,15 +117,27 @@
   function buildKeyboard() {
     const keyboard = $('keyboard');
     keyboard.textContent = '';
-    const addRow = (keys, offset) => {
+    for (const keys of ROWS) {
       const row = document.createElement('div');
-      row.className = `kb-row${offset ? ` offset-${offset}` : ''}`;
+      row.className = 'kb-row';
       for (const key of keys) {
-        const { label, code = codeFor(label), width } = typeof key === 'string' ? { label: key } : key;
+        const code = key.code || codeFor(key.label);
         const el = document.createElement('div');
         el.className = 'key';
         el.dataset.code = code;
-        el.textContent = label;
+        if (key.width) el.classList.add(key.width);
+        if (key.shift) {
+          const shift = document.createElement('span');
+          shift.className = 'shift';
+          shift.textContent = key.shift;
+          el.appendChild(shift);
+        }
+        const main = document.createElement('span');
+        main.className = 'main';
+        main.textContent = key.label;
+        el.appendChild(main);
+        if (fingerByCode.has(code)) el.dataset.finger = fingerByCode.get(code);
+        if (HOME_ROW.has(code)) el.classList.add('home');
         const info = state.infoByCode.get(code);
         if (info) {
           const sound = document.createElement('span');
@@ -103,16 +145,11 @@
           sound.textContent = info.sound;
           el.appendChild(sound);
         }
-        if (width) el.classList.add(width);
         state.keyEls.set(code, el);
         row.appendChild(el);
       }
       keyboard.appendChild(row);
-    };
-    for (const row of ROWS) {
-      addRow(row.keys, row.offset);
     }
-    addRow([{ label: 'Space', code: 'Space', width: 'space' }], 0);
   }
 
   function renderKeyboard() {
