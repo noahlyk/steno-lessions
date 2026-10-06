@@ -30,11 +30,11 @@ Keys are taken over only when they are steno keys. Ctrl, Alt and Meta combos, an
 ## How to practice
 
 - A stroke is a chord. Hold every key for it at once, then release them all. The stroke is scored when the last key comes up, so the keys can land in any order.
-- Each word has its sounds and keys directly under it, as parallel lines: the words, then the sounds to listen for, then the keys to press. The stroke being typed is highlighted. Its sounds turn green while their keys are held. A key the stroke does not use appears in red after the sounds.
+- Each word has its sounds and keys directly under it, as parallel lines: the words, then the sounds to listen for, then the keys to press. Sounds are coloured by where their key is: left-hand orange, vowels and star blue, right-hand purple. Their sounds turn green while their keys are held. A key the stroke does not use appears in red after the sounds.
 - Key hints (checkbox at the top) hides the keys line and the key names, so you type from the sounds alone. The layout stays the same. The setting is remembered in this browser.
 - Key names follow traditional steno. Left-side keys have no dash (`S`, `T`, `K`), and right-side keys take one (`-S`, `-T`, `-R`). A letter with only one key has no dash, like the vowels (`A`, `O`, `E`, `U`) and `-F`.
 - Any stroke Plover maps to the word counts. For example, `and` can be typed as `STK` or `-PB`.
-- A wrong chord says which keys you pressed and which stroke the word needs. The same word stays up until you get it.
+- A wrong chord stays on screen in red, and the message says which keys you pressed and which stroke the word needs. The word waits on that stroke until you type it right 3 times in a row. Strokes you already got right are kept.
 - The stream shows about 25 words. The word being typed is on the second row, and the stream scrolls as you finish words. Only strokes made from unlocked keys are shown.
 
 Steno keys show the sound big, with the letter you press small in the corner. Keys without a steno meaning are light gray. Steno keys you have not unlocked yet are darker gray, and show no sound until they unlock.

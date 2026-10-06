@@ -11,8 +11,9 @@
   --locked: #d6d5ce;
   --locked-ink: #55544e;
   --divider: #b9b8b0;
-  --middle-ink: #9a5b12;
-  --right-ink: #6b4fa0;
+  --left-ink: #c25e12;
+  --middle-ink: #2f7fd1;
+  --right-ink: #7a4fb0;
   --target: #2f7fd1;
   --target-ink: #ffffff;
   --down: #f2b84b;
@@ -34,7 +35,8 @@
     --locked: #3a3a35;
     --locked-ink: #c4c3ba;
     --divider: #77766d;
-    --middle-ink: #e3b26a;
+    --left-ink: #f0a04b;
+    --middle-ink: #5aa8f0;
     --right-ink: #b9a3e6;
     --target: #3b8ee0;
     --down: #d9a03a;
@@ -56,7 +58,8 @@
   --locked: #3a3a35;
   --locked-ink: #c4c3ba;
   --divider: #77766d;
-  --middle-ink: #e3b26a;
+  --left-ink: #f0a04b;
+  --middle-ink: #5aa8f0;
   --right-ink: #b9a3e6;
   --target: #3b8ee0;
   --down: #d9a03a;
@@ -181,7 +184,7 @@ main {
   border-radius: 8px;
 }
 .cell.done { opacity: 0.45; }
-.cell.current { background: var(--steno); }
+.cell.current { box-shadow: inset 0 0 0 1px var(--muted); }
 
 .w {
   grid-column: 1 / -1;
@@ -190,7 +193,6 @@ main {
   color: var(--ink);
   white-space: nowrap;
 }
-.cell.current .w { color: var(--steno-ink); }
 
 .snd {
   grid-row: 2;
@@ -214,11 +216,10 @@ main {
    one chord ends and the next begins */
 .snd + .snd, .kc + .kc { border-left: 2px solid var(--divider); }
 /* Left-hand keys, vowels and right-hand keys each have their own colour in the stream */
+.ch.left { color: var(--left-ink); }
 .ch.middle { color: var(--middle-ink); }
 .ch.right { color: var(--right-ink); }
-.kc.current { color: var(--target); }
-/* Each sound in the stroke being typed is blue, and turns green while its key is held */
-.snd.current .ch { color: var(--target); }
+/* Sounds keep their group colour while typed. A key held right turns its sound green. */
 .snd.current .ch.held { color: var(--good); }
 /* Keys held that the stroke does not use. Drawn past the sound, so the layout does not move */
 .extra {

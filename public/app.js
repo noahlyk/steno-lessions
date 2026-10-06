@@ -86,6 +86,8 @@
     wordMisses: 0,
     wordMs: 0,
     lastChordEnd: null,
+    failures: [],
+    drill: 0,
     typed: 0, // words finished this session
     pressed: new Set(),
     chordBits: 0,
@@ -219,6 +221,8 @@
     state.wordMisses = 0;
     state.wordMs = 0;
     state.lastChordEnd = null;
+    state.failures = [];
+    state.drill = 0;
   }
 
   // The word stream. Each word is a column, with its sounds and keys directly under it, so the
@@ -257,11 +261,15 @@
           sound.appendChild(ch);
         }
         if (status === 'current') {
-          const wrong = S.namesInBits(held & ~bits);
-          if (wrong.length) {
+          // Red text past the sounds: keys held that the stroke does not use, and the
+          // mistakes still to be drilled. Neither changes the layout.
+          const soundOf = (name) => state.slotByName.get(name)?.sound || name;
+          const wrong = S.namesInBits(held & ~bits).map(soundOf);
+          const failed = state.failures.map((chord) => S.namesInBits(chord).map(soundOf).join(''));
+          if (wrong.length || failed.length) {
             const extra = document.createElement('span');
             extra.className = 'extra';
-            extra.textContent = wrong.map((name) => state.slotByName.get(name)?.sound || name).join(' ');
+            extra.textContent = [...failed, ...wrong].join(' ');
             sound.appendChild(extra);
           }
         }
@@ -342,6 +350,8 @@
 
   // A pause between chords longer than this is not typing, so it is left out of the word's time (ms)
   const IDLE_MS = 3000;
+  // After a mistake, the stroke must be typed right this many times in a row to go on
+  const DRILL_REPEATS = 3;
 
   function finishChord() {
     if (!currentWord()) return;
@@ -359,12 +369,16 @@
     const matches = state.candidates.filter((strokes) => strokes[state.strokeIdx] === chord);
 
     if (matches.length === 0) {
-      // Score the miss against the stroke shown
+      // The mistake stays on screen as red text. The word waits on this stroke until it is
+      // typed right DRILL_REPEATS times in a row. Strokes already typed right are kept.
       const target = currentStroke();
       state.wordMisses += 1;
       L.recordChord(state.progress, S.namesInBits(target), ms, false);
+      state.failures.push(chord);
+      state.drill = DRILL_REPEATS;
       setFeedback(
-        `Needs ${S.renderStroke(target)} (${namesOf(target)}). You pressed ${namesOf(chord)}.`,
+        `Needs ${S.renderStroke(target)} (${namesOf(target)}). You pressed ${namesOf(chord)}. ` +
+          `Type it ${state.drill} more times in a row to go on.`,
         'bad',
       );
       refresh();
@@ -372,6 +386,15 @@
     }
 
     L.recordChord(state.progress, S.namesInBits(chord), ms, true);
+    if (state.drill > 0) {
+      state.drill -= 1;
+      if (state.drill > 0) {
+        setFeedback(`Right. ${state.drill} more in a row.`, 'good');
+        refresh();
+        return;
+      }
+      state.failures = [];
+    }
     state.candidates = matches;
     state.strokeIdx += 1;
     setFeedback('Good', 'good');
