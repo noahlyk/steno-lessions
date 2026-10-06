@@ -115,6 +115,25 @@ test('a word counts if any of its strokes can be typed with unlocked keys', () =
   assert.equal(lessons.usableVariants(and, mask).length, 1);
 });
 
+test('displayVariants never shows a stroke with a locked key, and puts the fewest keys first', () => {
+  const and = words.find((word) => word.text === 'and');
+  const early = lessons.unlockedMask(lessons.emptyProgress(), slotIndex);
+  const shown = lessons.displayVariants(and, early);
+  assert.equal(shown.length, 1);
+  assert.equal(shown[0][0], steno.parseStroke('STK'));
+
+  const all = (2 ** steno.SLOTS.length) - 1;
+  const late = lessons.displayVariants(and, all);
+  assert.equal(late.length, 2);
+  assert.equal(late[0][0], steno.parseStroke('-PB'), 'two keys beat three keys');
+
+  for (const word of words) {
+    for (const strokes of lessons.displayVariants(word, early)) {
+      for (const bits of strokes) assert.equal(bits & ~early, 0, `${word.text} uses only unlocked keys`);
+    }
+  }
+});
+
 test('pickWords returns distinct words and respects the count', () => {
   const progress = lessons.emptyProgress();
   for (let i = lessons.START_KEYS; i < lessons.KEY_ORDER.length; i++) progress.unlocked = i + 1;

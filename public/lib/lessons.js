@@ -178,6 +178,22 @@
     return word.variants.filter((strokes) => strokes.every((bits) => (bits & ~mask) === 0));
   }
 
+  function bitCount(bits) {
+    let count = 0;
+    for (let rest = bits; rest; rest &= rest - 1) count += 1;
+    return count;
+  }
+
+  // The stroke sequences to show for a word, using only unlocked keys. The first one is the
+  // stroke to type: fewest strokes, then fewest keys.
+  function displayVariants(word, mask) {
+    const keyCount = (strokes) => strokes.reduce((total, bits) => total + bitCount(bits), 0);
+    return usableVariants(word, mask)
+      .map((strokes) => ({ strokes, keys: keyCount(strokes) }))
+      .sort((a, b) => a.strokes.length - b.strokes.length || a.keys - b.keys)
+      .map((item) => item.strokes);
+  }
+
   // Picks words for the stream. Only words with at least one stroke sequence that uses
   // unlocked keys are eligible. Words that use the focus key come up more often, and words
   // in `avoid` (recently typed) are skipped where possible. `random` returns [0, 1).
@@ -247,6 +263,7 @@
     focusKey,
     unlockedMask,
     usableVariants,
+    displayVariants,
     pickWords,
   };
 });

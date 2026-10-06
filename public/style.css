@@ -136,16 +136,6 @@ main {
 .stroke-chip.current { border-color: var(--target); color: var(--ink); }
 .stroke-chip.done { color: var(--good); text-decoration: line-through; opacity: 0.7; }
 
-.sounds {
-  text-align: center;
-  color: var(--muted);
-  min-height: 1.5em;
-  margin-top: 8px;
-}
-
-.sounds span { margin: 0 6px; }
-.sounds b { color: var(--steno-ink); font-weight: 600; }
-
 .feedback {
   text-align: center;
   margin-top: 12px;
@@ -155,43 +145,56 @@ main {
 .feedback.good { color: var(--good); }
 .feedback.bad { color: var(--bad); }
 
-/* Word stream: about 25 words, the one being typed on the second line, scrolling as you go */
+/* Word stream: each word is a column with its sounds and keys under it, so the words, sounds
+   and keys run as three parallel lines. The layout is the same with Key hints on or off. */
 .stream {
   position: relative;
-  height: calc(2.2em * 3);
+  height: 330px;
   overflow: hidden;
-  font: 500 26px/2.2 system-ui, -apple-system, "Segoe UI", sans-serif;
-  letter-spacing: 0.01em;
-  text-align: left;
-}
-
-.stream .w { color: var(--ink); border-radius: 4px; padding: 0 2px; }
-.stream .w.done { color: var(--muted); opacity: 0.5; }
-.stream .w.current { background: var(--steno); color: var(--steno-ink); }
-
-.hint-rows {
-  display: grid;
-  gap: 8px;
-  justify-items: center;
-  margin-top: 14px;
-  min-height: 84px;
-}
-
-.hint-rows .row {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
-  gap: 10px;
-  min-height: 2.2em;
+  align-content: flex-start;
+  align-items: flex-start;
+  gap: 14px 18px;
+  padding-top: 4px;
 }
 
-/* One group per stroke: the group being typed is highlighted, finished ones fade */
-.group { display: inline-flex; gap: 8px; align-items: baseline; padding: 2px 8px; border-radius: 8px; }
-.group.current { background: var(--steno); }
-.group.done { opacity: 0.4; }
-.snd { font-size: 26px; font-weight: 700; color: var(--ink); }
-.kc { font: 600 20px ui-monospace, Menlo, monospace; color: var(--muted); }
-.group.current .kc { color: var(--target); }
+.cell {
+  display: grid;
+  row-gap: 4px;
+  column-gap: 10px;
+  justify-items: center;
+  width: max-content;
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+.cell.done { opacity: 0.45; }
+.cell.current { background: var(--steno); }
+
+.w {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  font: 500 26px/1.3 system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.cell.current .w { color: var(--steno-ink); }
+
+.snd {
+  grid-row: 2;
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.kc {
+  grid-row: 3;
+  font: 600 15px ui-monospace, Menlo, monospace;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.snd.current, .kc.current { color: var(--target); }
+.snd.done, .kc.done { opacity: 0.45; }
 
 .toggle {
   display: flex;
@@ -206,9 +209,8 @@ main {
 /* Key hints off: no key names on the keyboard, no keys row, no target highlight */
 .hints-off .key .letter,
 .hints-off .keyname,
-.hints-off #press { display: none; }
+.hints-off .kc { display: none; }
 
-.press { color: var(--muted); font-size: 14px; }
 .window-note { margin-top: 10px; text-align: center; color: var(--muted); font-size: 13px; }
 
 .keyboard-wrap { display: grid; gap: 10px; justify-items: center; }

@@ -96,7 +96,7 @@
   const shownStrokes = () => state.candidates[0] || [];
   const currentStroke = () => shownStrokes()[state.strokeIdx] || 0;
   const unlockedMask = () => L.unlockedMask(state.progress, state.slotIndex);
-  const namesOf = (bits) => S.namesInBits(bits).map(S.ploverLetter).join(' ') || 'nothing';
+  const namesOf = (bits) => S.namesInBits(bits).join(' ') || 'nothing';
 
   function setFeedback(text, kind) {
     const el = $('feedback');
@@ -208,67 +208,58 @@
     }
   }
 
+  // Only stroke sequences that use unlocked keys are shown, so a word never asks for a locked key
   function startWord() {
     const word = currentWord();
-    state.candidates = word ? word.variants.slice() : [];
+    state.candidates = word ? L.displayVariants(word, unlockedMask()) : [];
     state.strokeIdx = 0;
     state.wordMisses = 0;
     state.wordStart = null;
   }
 
-  // Shows about 25 words, with the one being typed on the second line, like a typing test.
+  // The word stream. Each word is a column, with its sounds and keys directly under it, so the
+  // words, sounds and keys run as three parallel lines (two when Key hints are off, since the
+  // keys line is hidden). The stroke being typed is highlighted.
   function renderStream() {
     const stream = $('stream');
     stream.textContent = '';
+    const mask = unlockedMask();
     const from = Math.max(0, state.index - 30);
     const to = Math.min(state.queue.length, state.index + 25);
     let current = null;
     for (let i = from; i < to; i++) {
-      const span = document.createElement('span');
-      span.className = 'w';
-      if (i < state.index) span.classList.add('done');
-      if (i === state.index) {
-        span.classList.add('current');
-        current = span;
-      }
-      span.textContent = state.queue[i].text;
-      stream.appendChild(span);
-      stream.append(' ');
+      const word = state.queue[i];
+      const isCurrent = i === state.index;
+      const strokes = isCurrent ? shownStrokes() : L.displayVariants(word, mask)[0] || [];
+      const cell = document.createElement('div');
+      cell.className = `cell${i < state.index ? ' done' : ''}${isCurrent ? ' current' : ''}`;
+      cell.style.gridTemplateColumns = `repeat(${Math.max(1, strokes.length)}, auto)`;
+      const wordEl = document.createElement('span');
+      wordEl.className = 'w';
+      wordEl.textContent = word.text;
+      cell.appendChild(wordEl);
+      strokes.forEach((bits, column) => {
+        const status = !isCurrent ? '' : column < state.strokeIdx ? 'done' : column === state.strokeIdx ? 'current' : '';
+        const sound = document.createElement('span');
+        sound.className = `snd ${status}`;
+        sound.style.gridColumn = column + 1;
+        sound.textContent = S.namesInBits(bits)
+          .map((name) => state.slotByName.get(name)?.sound || name)
+          .join(' ');
+        const keys = document.createElement('span');
+        keys.className = `kc ${status}`;
+        keys.style.gridColumn = column + 1;
+        keys.textContent = keysFor(bits).join(' ');
+        cell.append(sound, keys);
+      });
+      if (isCurrent) current = cell;
+      stream.appendChild(cell);
     }
     if (current) {
-      const lineHeight = parseFloat(getComputedStyle(stream).lineHeight) || 40;
-      stream.scrollTop = Math.max(0, current.offsetTop - lineHeight);
+      // Scroll so the word being typed sits on the second row
+      const rowGap = parseFloat(getComputedStyle(stream).rowGap) || 0;
+      stream.scrollTop = Math.max(0, current.offsetTop - current.offsetHeight - rowGap);
     }
-  }
-
-  // Two rows under the word, one group per stroke: the sounds on the first row, and the keys
-  // to press on the second. The stroke being typed is highlighted.
-  function renderStrokeHint() {
-    const sounds = $('sounds');
-    const keys = $('press');
-    sounds.textContent = '';
-    keys.textContent = '';
-    shownStrokes().forEach((bits, index) => {
-      const status = index < state.strokeIdx ? 'done' : index === state.strokeIdx ? 'current' : '';
-      const soundGroup = document.createElement('span');
-      const keyGroup = document.createElement('span');
-      soundGroup.className = `group ${status}`;
-      keyGroup.className = `group ${status}`;
-      for (const name of S.namesInBits(bits)) {
-        const span = document.createElement('span');
-        span.className = 'snd';
-        span.textContent = state.slotByName.get(name)?.sound || name;
-        soundGroup.appendChild(span);
-      }
-      for (const label of keysFor(bits)) {
-        const span = document.createElement('span');
-        span.className = 'kc';
-        span.textContent = label;
-        keyGroup.appendChild(span);
-      }
-      sounds.appendChild(soundGroup);
-      keys.appendChild(keyGroup);
-    });
   }
 
   function renderKeyList() {
@@ -280,7 +271,7 @@
       const confidence = L.confidence(state.progress, name);
       const slot = state.slotByName.get(name);
       item.innerHTML =
-        `<span class="name">${escapeHtml(S.ploverLetter(name))}</span>` +
+        `<span class="name">${escapeHtml(name)}</span>` +
         `<span class="sound">${escapeHtml(slot.sound)}<span class="keyname"> · ${escapeHtml(slot.label)}</span></span>` +
         `<span class="bar"><i style="width:${Math.round(confidence * 100)}%"></i></span>`;
       list.appendChild(item);
@@ -305,7 +296,6 @@
 
   function refresh() {
     renderStream();
-    renderStrokeHint();
     renderKeyboard();
     renderKeyList();
     renderStats();
