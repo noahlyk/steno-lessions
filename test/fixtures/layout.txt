@@ -1,0 +1,26 @@
+Steno  Press  Sound
+S-     A      s
+T-     W      t
+K-     S      k
+P-     E      p
+W-     D      w
+H-     R      h
+R-     F      r
+A-     X      a
+O-     C      o
+*      T      *
+-E     N      e
+-U     M      u
+-F     Y      f
+-R     H      r
+-P     U      p
+-B     J      b
+-L     I      l
+-G     K      g
+-T     O      t
+-S     L      s
+-D     P      d
+-Z     ;      z
+#      1      #
+-E+-U  ,      e + u
+A-+O-  V      a + o

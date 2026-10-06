@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>steno-lessons</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">steno<span>-lessons</span></div>
+    <div class="stats" id="stats"></div>
+  </header>
+
+  <main>
+    <p class="error" id="error" hidden></p>
+
+    <section class="card" id="practice" aria-live="polite">
+      <div class="word-meta">
+        <span id="lesson-label">Lesson 1</span>
+        <span id="word-count"></span>
+      </div>
+      <div class="word" id="word">Loading…</div>
+      <div class="strokes" id="strokes"></div>
+      <div class="sounds" id="sounds"></div>
+      <div class="feedback" id="feedback">Press the keys for each stroke all at once, then release.</div>
+    </section>
+
+    <section class="keyboard-wrap">
+      <div class="keyboard" id="keyboard" aria-label="QWERTY keyboard"></div>
+      <p class="legend">
+        <span class="swatch steno"></span> steno key
+        <span class="swatch locked"></span> not unlocked yet
+        <span class="swatch target"></span> needed for this stroke
+        <span class="swatch down"></span> held
+      </p>
+    </section>
+
+    <section class="card keys-panel">
+      <h2>Steno keys</h2>
+      <p class="hint">Keys unlock one at a time. Each one is unlocked once the keys before it are typed fast and accurately.</p>
+      <ul class="key-list" id="key-list"></ul>
+    </section>
+  </main>
+
+  <div class="summary" id="summary" hidden>
+    <div class="summary-card">
+      <h2 id="summary-title">Lesson complete</h2>
+      <p id="summary-body"></p>
+      <button type="button" id="next-lesson">Next lesson <kbd>Enter</kbd></button>
+    </div>
+  </div>
+
+  <script src="/lib/steno.js"></script>
+  <script src="/lib/lessons.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
