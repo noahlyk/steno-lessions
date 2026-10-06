@@ -169,13 +169,44 @@ main {
 .stream .w.done { color: var(--muted); opacity: 0.5; }
 .stream .w.current { background: var(--steno); color: var(--steno-ink); }
 
-.stroke-line {
+.hint-rows {
   display: grid;
+  gap: 8px;
   justify-items: center;
-  gap: 4px;
-  margin-top: 16px;
-  min-height: 90px;
+  margin-top: 14px;
+  min-height: 84px;
 }
+
+.hint-rows .row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  min-height: 2.2em;
+}
+
+/* One group per stroke: the group being typed is highlighted, finished ones fade */
+.group { display: inline-flex; gap: 8px; align-items: baseline; padding: 2px 8px; border-radius: 8px; }
+.group.current { background: var(--steno); }
+.group.done { opacity: 0.4; }
+.snd { font-size: 26px; font-weight: 700; color: var(--ink); }
+.kc { font: 600 20px ui-monospace, Menlo, monospace; color: var(--muted); }
+.group.current .kc { color: var(--target); }
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Key hints off: no key names on the keyboard, no keys row, no target highlight */
+.hints-off .key .letter,
+.hints-off .keyname,
+.hints-off #press { display: none; }
 
 .press { color: var(--muted); font-size: 14px; }
 .window-note { margin-top: 10px; text-align: center; color: var(--muted); font-size: 13px; }
@@ -233,22 +264,33 @@ main {
 
 .key .main { font-size: 15px; line-height: 1; }
 
-/* On steno keys the sound is the big label and the letter you press is small in the corner */
-.key .letter {
+/* Steno keys: the sound is big on top, and the key you press is named underneath */
+.key.steno .main.sound {
   position: absolute;
-  top: 3px;
-  left: 5px;
-  font-size: 9px;
-  line-height: 1;
-  opacity: 0.6;
+  top: 6px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 19px;
+  font-weight: 700;
 }
 
-.key.steno .main.sound { font-size: 19px; font-weight: 700; }
+.key .letter {
+  position: absolute;
+  bottom: 4px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 600;
+  opacity: 0.75;
+}
 
 .key.home::after {
   content: "";
   position: absolute;
-  bottom: 13px;
+  bottom: 18px;
   left: 50%;
   width: 4px;
   height: 4px;

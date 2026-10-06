@@ -53,6 +53,21 @@
   }
 
   const $ = (id) => document.getElementById(id);
+
+  // "Key hints" on shows the key names and the keys to press. Off leaves only the sounds,
+  // so you type from the sounds alone. Saved in this browser.
+  const HINTS_KEY = "steno-lessons.hints";
+  function readHints() {
+    try {
+      return localStorage.getItem(HINTS_KEY) !== "off";
+    } catch {
+      return true;
+    }
+  }
+  function applyHints() {
+    document.body.classList.toggle("hints-off", !state.hints);
+    $("hints").checked = state.hints;
+  }
   const escapeHtml = (text) => text.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
   const state = {
@@ -61,6 +76,7 @@
     slotIndex: new Map(S.SLOTS.map(([, name], index) => [name, index])),
     infoByCode: new Map(), // event.code -> { bits, sound, combined, label }
     slotByName: new Map(), // "S-" -> { name, sound, label }
+    hints: readHints(),
     keyEls: new Map(), // event.code -> element
     queue: [], // words in the stream, oldest first
     index: 0, // the word being typed
@@ -80,7 +96,7 @@
   const shownStrokes = () => state.candidates[0] || [];
   const currentStroke = () => shownStrokes()[state.strokeIdx] || 0;
   const unlockedMask = () => L.unlockedMask(state.progress, state.slotIndex);
-  const namesOf = (bits) => S.namesInBits(bits).join(' ') || 'nothing';
+  const namesOf = (bits) => S.namesInBits(bits).map(S.ploverLetter).join(' ') || 'nothing';
 
   function setFeedback(text, kind) {
     const el = $('feedback');
@@ -170,7 +186,7 @@
       const info = state.infoByCode.get(code);
       el.classList.toggle('steno', Boolean(info));
       el.classList.toggle('locked', Boolean(info) && (info.bits & ~mask) !== 0);
-      el.classList.toggle('target', Boolean(info) && target !== 0 && (info.bits & target) === info.bits);
+      el.classList.toggle('target', state.hints && Boolean(info) && target !== 0 && (info.bits & target) === info.bits);
       el.classList.toggle('down', state.pressed.has(code));
     }
   }
@@ -225,32 +241,34 @@
     }
   }
 
-  function renderStrokes() {
-    const box = $('strokes');
-    box.textContent = '';
-    shownStrokes().forEach((bits, index) => {
-      const chip = document.createElement('span');
-      chip.className = 'stroke-chip';
-      if (index < state.strokeIdx) chip.classList.add('done');
-      if (index === state.strokeIdx) chip.classList.add('current');
-      chip.textContent = S.renderStroke(bits);
-      box.appendChild(chip);
-    });
-  }
-
+  // Two rows under the word, one group per stroke: the sounds on the first row, and the keys
+  // to press on the second. The stroke being typed is highlighted.
   function renderStrokeHint() {
     const sounds = $('sounds');
-    const press = $('press');
+    const keys = $('press');
     sounds.textContent = '';
-    press.textContent = '';
-    const target = currentStroke();
-    if (!target) return;
-    for (const name of S.namesInBits(target)) {
-      const span = document.createElement('span');
-      span.innerHTML = `<b>${escapeHtml(name)}</b> ${escapeHtml(state.slotByName.get(name)?.sound || '')}`;
-      sounds.appendChild(span);
-    }
-    press.textContent = `press ${keysFor(target).join(' + ')}`;
+    keys.textContent = '';
+    shownStrokes().forEach((bits, index) => {
+      const status = index < state.strokeIdx ? 'done' : index === state.strokeIdx ? 'current' : '';
+      const soundGroup = document.createElement('span');
+      const keyGroup = document.createElement('span');
+      soundGroup.className = `group ${status}`;
+      keyGroup.className = `group ${status}`;
+      for (const name of S.namesInBits(bits)) {
+        const span = document.createElement('span');
+        span.className = 'snd';
+        span.textContent = state.slotByName.get(name)?.sound || name;
+        soundGroup.appendChild(span);
+      }
+      for (const label of keysFor(bits)) {
+        const span = document.createElement('span');
+        span.className = 'kc';
+        span.textContent = label;
+        keyGroup.appendChild(span);
+      }
+      sounds.appendChild(soundGroup);
+      keys.appendChild(keyGroup);
+    });
   }
 
   function renderKeyList() {
@@ -262,8 +280,8 @@
       const confidence = L.confidence(state.progress, name);
       const slot = state.slotByName.get(name);
       item.innerHTML =
-        `<span class="name">${escapeHtml(name)}</span>` +
-        `<span class="sound">${escapeHtml(slot.sound)} · key ${escapeHtml(slot.label)}</span>` +
+        `<span class="name">${escapeHtml(S.ploverLetter(name))}</span>` +
+        `<span class="sound">${escapeHtml(slot.sound)}<span class="keyname"> · key ${escapeHtml(slot.label)}</span></span>` +
         `<span class="bar"><i style="width:${Math.round(confidence * 100)}%"></i></span>`;
       list.appendChild(item);
     });
@@ -287,7 +305,6 @@
 
   function refresh() {
     renderStream();
-    renderStrokes();
     renderStrokeHint();
     renderKeyboard();
     renderKeyList();
@@ -424,6 +441,17 @@
     }
     buildIndexes(state.data.layout);
     buildKeyboard();
+    applyHints();
+    $("hints").addEventListener("change", (event) => {
+      state.hints = event.target.checked;
+      try {
+        localStorage.setItem(HINTS_KEY, state.hints ? "on" : "off");
+      } catch {
+        // Saving is only a convenience; the setting still applies for this visit
+      }
+      applyHints();
+      refresh();
+    });
     ensureQueue();
     startWord();
     refresh();

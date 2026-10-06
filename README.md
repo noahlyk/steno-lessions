@@ -30,7 +30,9 @@ Keys are taken over only when they are steno keys. Ctrl, Alt and Meta combos, an
 ## How to practice
 
 - A stroke is a chord. Hold every key for it at once, then release them all. The stroke is scored when the last key comes up, so the keys can land in any order.
-- The stroke line shows the stroke in Plover notation, the sound of each key, and the physical keys to press (for example `press W + S + N + O`).
+- Under the word are two rows, one group per stroke. The top row is the sounds to listen for, and the bottom row is the keys to press.
+- Key hints (checkbox at the top) turns off the key names and the keys row, so you type from the sounds alone. The setting is remembered in this browser.
+- Steno letters are written the way Plover writes them: `A` and `O` have no dash, and right-side keys keep it (`-E`, `-T`).
 - Any stroke Plover maps to the word counts. For example, `and` can be typed as `STK` or `-PB`.
 - A wrong chord says which keys you pressed and which stroke the word needs. The same word stays up until you get it.
 - The stream shows about 25 words. The word being typed is on the second line, and the stream scrolls as you finish words.

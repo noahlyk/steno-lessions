@@ -134,5 +134,11 @@
     return `${number}${left}${!middle && right ? '-' : ''}${middle}${right}`;
   }
 
-  return { SLOTS, parseStroke, parseLayout, namesInBits, buildWords, popcount, renderStroke };
+  // The letter Plover writes for a steno key. "A-" is written "A": the trailing dash is only
+  // keymux config naming for left-side keys. Right-side keys keep their dash, as in "-E".
+  function ploverLetter(name) {
+    return name.length > 1 && name.endsWith("-") ? name.slice(0, -1) : name;
+  }
+
+  return { SLOTS, parseStroke, parseLayout, namesInBits, buildWords, popcount, renderStroke, ploverLetter };
 });

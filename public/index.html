@@ -9,6 +9,7 @@
 <body>
   <header class="topbar">
     <div class="brand">steno<span>-lessons</span></div>
+    <label class="toggle"><input type="checkbox" id="hints" checked> Key hints</label>
     <div class="stats" id="stats"></div>
   </header>
 
@@ -17,10 +18,9 @@
 
     <section class="card" id="practice" aria-live="polite">
       <div class="stream" id="stream"></div>
-      <div class="stroke-line">
-        <div class="strokes" id="strokes"></div>
-        <div class="sounds" id="sounds"></div>
-        <div class="press" id="press"></div>
+      <div class="hint-rows">
+        <div class="row sounds" id="sounds"></div>
+        <div class="row keys" id="press"></div>
       </div>
       <div class="feedback" id="feedback">Hold the keys for each stroke all at once, then release. No steno mode needed.</div>
       <div class="window-note" id="window-note"></div>
@@ -29,7 +29,7 @@
     <section class="keyboard-wrap">
       <div class="keyboard" id="keyboard" aria-label="QWERTY keyboard"></div>
       <p class="legend">
-        <span class="swatch steno"></span> steno key (big letter is the sound)
+        <span class="swatch steno"></span> steno key (sound on top, key below)
         <span class="swatch locked"></span> not unlocked yet
         <span class="swatch target"></span> needed for this stroke
         <span class="swatch down"></span> held
