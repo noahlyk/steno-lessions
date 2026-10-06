@@ -352,6 +352,8 @@
   const IDLE_MS = 3000;
   // After a mistake, the stroke must be typed right this many times in a row to go on
   const DRILL_REPEATS = 3;
+  // The * stroke, which is undo in Plover (the T key on this layout)
+  const UNDO = S.parseStroke('*');
 
   function finishChord() {
     if (!currentWord()) return;
@@ -368,6 +370,23 @@
     state.lastChordEnd = now;
     const matches = state.candidates.filter((strokes) => strokes[state.strokeIdx] === chord);
 
+    if (matches.length === 0 && chord === UNDO) {
+      // As in Plover, * on its own is undo. It removes the last wrong attempt and nothing else,
+      // so strokes already typed right are kept.
+      if (state.failures.length === 0) {
+        setFeedback('Nothing to undo. * only removes a wrong attempt.', 'bad');
+      } else {
+        state.failures.pop();
+        if (state.failures.length === 0) state.drill = 0;
+        setFeedback(
+          state.failures.length ? `Undone. ${state.failures.length} wrong attempt(s) left.` : 'Undone. Back on track.',
+          'good',
+        );
+      }
+      refresh();
+      return;
+    }
+
     if (matches.length === 0) {
       // The mistake stays on screen as red text. The word waits on this stroke until it is
       // typed right DRILL_REPEATS times in a row. Strokes already typed right are kept.
@@ -378,7 +397,7 @@
       state.drill = DRILL_REPEATS;
       setFeedback(
         `Needs ${S.renderStroke(target)} (${namesOf(target)}). You pressed ${namesOf(chord)}. ` +
-          `Type it ${state.drill} more times in a row to go on.`,
+          `Type it ${state.drill} more times in a row to go on, or press * (T key) to undo.`,
         'bad',
       );
       refresh();
