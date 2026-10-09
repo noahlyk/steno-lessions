@@ -1,4 +1,4 @@
-# [▶ Open steno-lessons](https://noahlyk.github.io/steno-lessions/)
+# [▶ Open steno-lessions](https://noahlyk.github.io/steno-lessions/)
 
 Learn steno one key at a time, the way keybr and monkeytype teach typing. You type on your normal keyboard. The page turns your key presses into steno strokes, and the keyboard shows which keys are steno keys and what sound each one makes.
 
@@ -18,7 +18,7 @@ Settings come from environment variables:
 
 | Variable | Default | What it does |
 | --- | --- | --- |
-| `STENO_LESSONS_DATA` | `~/.config/steno-lessons/progress.json` | Where progress is saved |
+| `STENO_LESSIONS_DATA` | `~/.config/steno-lessions/progress.json` | Where progress is saved |
 | `PORT` | `4321` | Port to listen on |
 
 ## Hosting it statically (e.g. GitHub Pages)

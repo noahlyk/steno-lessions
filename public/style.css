@@ -288,16 +288,25 @@ body.paused #practice .feedback {
 .ch.right { color: var(--right-ink); }
 /* Sounds keep their group colour while typed. A key held right turns its sound green. */
 .snd.current .ch.held { color: var(--good); }
-/* Keys held that the stroke does not use. Drawn past the sound, so the layout does not move */
-.extra {
-  position: absolute;
-  left: 100%;
-  top: 0;
-  padding-left: 4px;
+/* Wrong keys, inserted right into the sound sequence instead of floating off to the side */
+.ch.wrong {
   color: var(--bad);
-  pointer-events: none;
+  margin-left: 2px;
 }
 .snd.done, .kc.done { opacity: 0.45; }
+
+/* A faint preview, above the word, of the chord currently held - judged before it's released */
+.preview {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  align-self: start;
+  justify-self: center;
+  transform: translateY(-85%);
+  font: 600 12px ui-monospace, Menlo, monospace;
+  color: var(--muted);
+  white-space: nowrap;
+  pointer-events: none;
+}
 
 .toggle {
   display: flex;

@@ -1,8 +1,8 @@
-// Local server for steno-lessons. Serves the page, the hardcoded layout/dictionary bundle,
+// Local server for steno-lessions. Serves the page, the hardcoded layout/dictionary bundle,
 // and saves lesson progress to a file. No external process or dictionary install needed.
 //
 // Environment:
-//   STENO_LESSONS_DATA  file that stores progress (default: ~/.config/steno-lessons/progress.json)
+//   STENO_LESSIONS_DATA  file that stores progress (default: ~/.config/steno-lessions/progress.json)
 //   PORT                port to listen on (default: 4321)
 const http = require('node:http');
 const fs = require('node:fs');
@@ -12,7 +12,7 @@ const os = require('node:os');
 const PUBLIC = path.join(__dirname, 'public');
 const BUNDLE_FILE = path.join(PUBLIC, 'data', 'bundle.json');
 const DATA_FILE =
-  process.env.STENO_LESSONS_DATA || path.join(os.homedir(), '.config', 'steno-lessons', 'progress.json');
+  process.env.STENO_LESSIONS_DATA || path.join(os.homedir(), '.config', 'steno-lessions', 'progress.json');
 const PORT = Number(process.env.PORT) || 4321;
 const MAX_BODY = 1024 * 1024;
 
@@ -111,7 +111,7 @@ if (require.main === module) {
     });
   });
   server.listen(PORT, '127.0.0.1', () => {
-    console.log(`steno-lessons at http://127.0.0.1:${PORT}`);
+    console.log(`steno-lessions at http://127.0.0.1:${PORT}`);
   });
 }
 

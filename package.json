@@ -1,5 +1,5 @@
 {
-  "name": "steno-lessons",
+  "name": "steno-lessions",
   "version": "0.2.0",
   "private": true,
   "description": "Learn steno one key at a time on a QWERTY keyboard, with a hardcoded layout and dictionary",
@@ -11,5 +11,5 @@
   "engines": {
     "node": ">=18"
   },
-  "license": "UNLICENSED"
+  "license": "AGPL-3.0-or-later"
 }

@@ -56,10 +56,12 @@
 
   // "Key hints" on shows the key names and the keys to press. Off leaves only the sounds,
   // so you type from the sounds alone. Saved in this browser.
-  const HINTS_KEY = "steno-lessons.hints";
+  const HINTS_KEY = "steno-lessions.hints";
+  const OLD_HINTS_KEY = "steno-lessons.hints";
   function readHints() {
     try {
-      return localStorage.getItem(HINTS_KEY) === "on";
+      const value = localStorage.getItem(HINTS_KEY) ?? localStorage.getItem(OLD_HINTS_KEY);
+      return value === "on";
     } catch {
       return false;
     }
@@ -239,6 +241,17 @@
       wordEl.className = 'w';
       wordEl.textContent = word.text;
       cell.appendChild(wordEl);
+      if (isCurrent) {
+        // A faint preview of what this chord is holding right now, shown above the word so
+        // letting go can be judged before it happens, not only after.
+        const held = heldBits();
+        const preview = document.createElement('span');
+        preview.className = 'preview';
+        if (held) {
+          preview.textContent = S.namesInBits(held).map((name) => state.slotByName.get(name)?.sound || name).join('');
+        }
+        cell.appendChild(preview);
+      }
       strokes.forEach((bits, column) => {
         const status = !isCurrent ? '' : column < state.strokeIdx ? 'done' : column === state.strokeIdx ? 'current' : '';
         const sound = document.createElement('span');
@@ -254,16 +267,18 @@
           sound.appendChild(ch);
         }
         if (status === 'current') {
-          // Red text past the sounds: keys held that the stroke does not use, and the
-          // mistakes still to be drilled. Neither changes the layout.
+          // Wrong keys are inserted into the sound itself, right after the sounds this stroke
+          // is made of, instead of floating off to the side. They disappear as soon as this
+          // chord is let go and a fresh one starts (held keys are live), except for a mistake
+          // still being drilled, which stays until it's typed right or undone with *.
           const soundOf = (name) => state.slotByName.get(name)?.sound || name;
           const wrong = S.namesInBits(held & ~bits).map(soundOf);
           const failed = state.failures.map((chord) => S.namesInBits(chord).map(soundOf).join(''));
-          if (wrong.length || failed.length) {
-            const extra = document.createElement('span');
-            extra.className = 'extra';
-            extra.textContent = [...failed, ...wrong].join(' ');
-            sound.appendChild(extra);
+          for (const text of [...failed, ...wrong]) {
+            const ch = document.createElement('span');
+            ch.className = 'ch wrong';
+            ch.textContent = text;
+            sound.appendChild(ch);
           }
         }
         const keys = document.createElement('span');
@@ -384,7 +399,8 @@
   // The server (public/api) is one way to run this app; a static host with no server, such
   // as GitHub Pages, is the other. `state.static` picks localStorage/the bundled data file
   // once the server's own endpoints turn out to be unavailable.
-  const PROGRESS_KEY = 'steno-lessons-progress';
+  const PROGRESS_KEY = 'steno-lessions-progress';
+  const OLD_PROGRESS_KEY = 'steno-lessons-progress';
 
   async function saveProgress() {
     if (state.static) {
@@ -405,7 +421,7 @@
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
     } catch (error) {
       console.error('could not save progress', error);
-      setFeedback('Progress could not be saved. Is the steno-lessons server still running?', 'bad');
+      setFeedback('Progress could not be saved. Is the steno-lessions server still running?', 'bad');
     }
   }
 
@@ -595,7 +611,7 @@
     } catch (error) {
       state.static = true;
       try {
-        const saved = localStorage.getItem(PROGRESS_KEY);
+        const saved = localStorage.getItem(PROGRESS_KEY) ?? localStorage.getItem(OLD_PROGRESS_KEY);
         state.progress = L.normalize(saved ? JSON.parse(saved) : null);
       } catch (localError) {
         state.progress = L.emptyProgress();
