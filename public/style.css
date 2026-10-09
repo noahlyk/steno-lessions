@@ -258,14 +258,14 @@ body.paused #practice .feedback {
 
 .w {
   grid-column: 1 / -1;
-  grid-row: 1;
+  grid-row: 2;
   font: 500 26px/1.3 system-ui, -apple-system, "Segoe UI", sans-serif;
   color: var(--ink);
   white-space: nowrap;
 }
 
 .snd {
-  grid-row: 2;
+  grid-row: 3;
   position: relative;
   display: flex;
   gap: 1px;
@@ -276,7 +276,7 @@ body.paused #practice .feedback {
   white-space: nowrap;
 }
 .kc {
-  grid-row: 3;
+  grid-row: 4;
   padding: 0 7px;
   font: 600 15px ui-monospace, Menlo, monospace;
   color: var(--muted);
@@ -301,18 +301,20 @@ body.paused #practice .feedback {
 }
 .snd.done, .kc.done { opacity: 0.45; }
 
-/* A faint preview, above the word, of the chord currently held - judged before it's released */
+/* A faint preview, above the word, of what letting go right now would resolve to - its own
+   grid row, so it never overlaps the word or the cell's border */
 .preview {
   grid-column: 1 / -1;
   grid-row: 1;
-  align-self: start;
   justify-self: center;
-  transform: translateY(-85%);
+  min-height: 14px;
   font: 600 12px ui-monospace, Menlo, monospace;
   color: var(--muted);
   white-space: nowrap;
   pointer-events: none;
 }
+.preview.resolved { color: var(--good); }
+.preview.unresolved { color: var(--bad); font-style: italic; }
 
 .toggle {
   display: flex;

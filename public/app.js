@@ -78,6 +78,7 @@
     slotIndex: new Map(S.SLOTS.map(([, name], index) => [name, index])),
     infoByCode: new Map(), // event.code -> { bits, sound, combined, label }
     slotByName: new Map(), // "S-" -> { name, sound, label }
+    strokeWord: new Map(), // single-stroke chord bits -> the word it translates to
     hints: readHints(),
     keyEls: new Map(), // event.code -> element
     lesson: [], // the current lesson's words, fixed size
@@ -90,6 +91,7 @@
     wordMs: 0,
     lastChordEnd: null,
     failures: [],
+    retrying: false, // true while the current chord is held, so old errors stay hidden
     drill: 0,
     typed: 0, // words finished this session
     pressed: new Set(),
@@ -124,6 +126,18 @@
     }
     for (const slot of layout.slots) {
       state.slotByName.set(slot.name, slot);
+    }
+  }
+
+  // Every one-stroke word in the dictionary, keyed by its chord, so letting go can show what
+  // steno would actually translate that exact chord to, not just the sounds it's built from.
+  function buildStrokeIndex(words) {
+    for (const word of words) {
+      for (const strokes of word.variants) {
+        if (strokes.length === 1 && !state.strokeWord.has(strokes[0])) {
+          state.strokeWord.set(strokes[0], word.text);
+        }
+      }
     }
   }
 
@@ -219,6 +233,7 @@
     state.wordMs = 0;
     state.lastChordEnd = null;
     state.failures = [];
+    state.retrying = false;
     state.drill = 0;
   }
 
@@ -242,13 +257,26 @@
       wordEl.textContent = word.text;
       cell.appendChild(wordEl);
       if (isCurrent) {
-        // A faint preview of what this chord is holding right now, shown above the word so
-        // letting go can be judged before it happens, not only after.
+        // A faint preview, above the word, of what letting go right now would actually
+        // resolve to - steno's own translation of the held chord, not just its sounds.
         const held = heldBits();
         const preview = document.createElement('span');
         preview.className = 'preview';
         if (held) {
-          preview.textContent = S.namesInBits(held).map((name) => state.slotByName.get(name)?.sound || name).join('');
+          const continues = state.candidates.some((seq) => seq[state.strokeIdx] === held);
+          if (continues) {
+            preview.classList.add('resolved');
+            preview.textContent = word.text;
+          } else {
+            const known = state.strokeWord.get(held);
+            if (known) {
+              preview.classList.add('resolved');
+              preview.textContent = known;
+            } else {
+              preview.classList.add('unresolved');
+              preview.textContent = S.renderStroke(held);
+            }
+          }
         }
         cell.appendChild(preview);
       }
@@ -264,22 +292,34 @@
           const group = S.keyGroup(name);
           ch.className = `ch${group ? ` ${group}` : ''}${isHeld ? ' held' : ''}`;
           if (group) ch.style.setProperty('--shade', S.keyShade(name));
+          ch.dataset.slot = String(state.slotIndex.get(name));
           ch.textContent = state.slotByName.get(name)?.sound || name;
           sound.appendChild(ch);
         }
         if (status === 'current') {
-          // Wrong keys are inserted into the sound itself, right after the sounds this stroke
-          // is made of, instead of floating off to the side. They disappear as soon as this
-          // chord is let go and a fresh one starts (held keys are live), except for a mistake
-          // still being drilled, which stays until it's typed right or undone with *.
+          // Wrong keys are inserted into the sound sequence at the slot position they'd
+          // naturally fall in (left to right, same order as the correct sounds), instead of
+          // being appended after it. They disappear the instant a fresh chord begins (the
+          // keydown handler clears state.failures then), so an error never lingers into the
+          // next attempt - it looks exactly like a clean first try.
           const soundOf = (name) => state.slotByName.get(name)?.sound || name;
-          const wrong = S.namesInBits(held & ~bits).map(soundOf);
-          const failed = state.failures.map((chord) => S.namesInBits(chord).map(soundOf).join(''));
-          for (const text of [...failed, ...wrong]) {
+          const wrongNames = S.namesInBits(held & ~bits);
+          const failedNames = state.retrying ? [] : state.failures.flatMap((chord) => S.namesInBits(chord));
+          const insertions = [...failedNames, ...wrongNames].map((name) => ({
+            at: state.slotIndex.get(name),
+            text: soundOf(name),
+          }));
+          for (const { at, text } of insertions) {
             const ch = document.createElement('span');
             ch.className = 'ch wrong';
             ch.textContent = text;
-            sound.appendChild(ch);
+            // Find the correct-sound span already in this slot's position, if any, and insert
+            // right after it, so wrong keys land among the sounds in the same left-to-right
+            // order instead of all trailing at the end.
+            const before = [...sound.children].find(
+              (el) => el.dataset.slot !== undefined && Number(el.dataset.slot) > at,
+            );
+            sound.insertBefore(ch, before || null);
           }
         }
         const keys = document.createElement('span');
@@ -435,6 +475,7 @@
 
   function finishChord() {
     if (!currentWord()) return;
+    state.retrying = false;
     const chord = state.chordBits;
     const now = performance.now();
     const ms = now - state.chordStart;
@@ -469,7 +510,9 @@
       // The mistake stays on screen as red text. The word waits on this stroke until it is
       // typed right DRILL_REPEATS times in a row. Strokes already typed right are kept.
       const target = currentStroke();
-      state.wordMisses += 1;
+      // Accuracy is forgiving per word: however many wrong attempts a word takes, it counts
+      // as one inaccuracy for the word, not one per attempt.
+      state.wordMisses = 1;
       L.recordChord(state.progress, S.namesInBits(target), ms, false);
       state.failures.push(chord);
       state.drill = DRILL_REPEATS;
@@ -533,6 +576,7 @@
     state.pressed.clear();
     state.chordBits = 0;
     state.lastChordEnd = null;
+    state.retrying = false;
     renderChord();
   }
 
@@ -570,6 +614,11 @@
     if (state.pressed.size === 0) {
       state.chordBits = 0;
       state.chordStart = performance.now();
+      // A fresh stroke starts clean: any error display left over from the last attempt is
+      // hidden the instant the next one begins, as if it never happened. The failures
+      // themselves (and the drill count) are untouched, so undo (*) still works and a wrong
+      // stroke still needs a correct retry - only the leftover red text is hidden.
+      state.retrying = true;
     }
     state.pressed.add(event.code);
     state.chordBits |= info.bits;
@@ -619,6 +668,7 @@
       }
     }
     buildIndexes(state.data.layout);
+    buildStrokeIndex(state.data.words);
     buildKeyboard();
     applyHints();
     $("hints").addEventListener("change", (event) => {
