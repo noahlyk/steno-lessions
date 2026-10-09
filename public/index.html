@@ -7,10 +7,16 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">steno<span>-lessons</span></div>
-    <label class="toggle"><input type="checkbox" id="hints" checked> Key hints</label>
-    <div class="stats" id="stats"></div>
+  <header class="hud" id="hud">
+    <div class="hud-row hud-metrics" id="metrics-row">
+      <span class="brand">steno<span>-lessons</span></span>
+      <span class="metrics" id="metrics"></span>
+      <span class="lesson-note" id="lesson-note"></span>
+      <label class="toggle"><input type="checkbox" id="hints" checked> Key hints</label>
+    </div>
+    <ul class="hud-row key-chips" id="key-chips"></ul>
+    <div class="hud-row hud-line"><span class="hud-label">Current key:</span> <span id="current-key"></span></div>
+    <div class="hud-row hud-line"><span class="hud-label">Accuracy:</span> <span id="accuracy-streak"></span></div>
   </header>
 
   <main>
@@ -19,7 +25,9 @@
     <section class="card" id="practice" aria-live="polite">
       <div class="stream" id="stream"></div>
       <div class="feedback" id="feedback">Hold the keys for each stroke all at once, then release. No steno mode needed.</div>
-      <div class="window-note" id="window-note"></div>
+      <div id="pause-overlay" class="hidden">
+        <p>Paused &mdash; press any key to resume</p>
+      </div>
     </section>
 
     <section class="keyboard-wrap">
@@ -31,15 +39,10 @@
         <span class="swatch down"></span> held
       </p>
     </section>
-
-    <section class="card keys-panel">
-      <h2>Keys</h2>
-      <p class="hint">A key unlocks when your speed and accuracy reach the goal. Layout from <code>keymux steno layout</code>.</p>
-      <ul class="key-list" id="key-list"></ul>
-    </section>
   </main>
 
   <script src="/lib/steno.js"></script>
+  <script src="/lib/word-frequency.js"></script>
   <script src="/lib/lessons.js"></script>
   <script src="/app.js"></script>
 </body>

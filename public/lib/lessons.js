@@ -3,11 +3,11 @@
 // so it runs in the page and in tests.
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
-    module.exports = factory();
+    module.exports = factory(require('./word-frequency.js'));
   } else {
-    root.StenoLessons = factory();
+    root.StenoLessons = factory(root.StenoWordFreq);
   }
-})(typeof self !== 'undefined' ? self : globalThis, function () {
+})(typeof self !== 'undefined' ? self : globalThis, function (WordFreq) {
   // Order keys are introduced in: the vowels and the most common consonant sounds
   // first, then the rest of the left hand, the right hand, and finally the star and
   // number keys. Names are keymux's config names.
@@ -16,14 +16,15 @@
     'W-', '-U', '-L', '-D', '-P', '-B', '-G', '-F', '*', '-Z', '#',
   ];
   const START_KEYS = 6;
-  // Words added to the stream at a time.
-  const BATCH_WORDS = 25;
-  // Completed words used to judge speed and accuracy before a key can unlock. A moving window:
-  // only the newest words count, and the history is cleared on each unlock.
-  const WORD_WINDOW = 40;
+  // Words in one lesson: the stream shows exactly this many, and the same count is used to
+  // judge speed and accuracy before a key can unlock. The history is cleared on each unlock,
+  // so a lesson's words line up exactly with the judging window.
+  const LESSON_SIZE = 30;
   // Share of strokes that must be right on the first try.
   const ACCURACY_TARGET = 0.95;
-  // Completed words kept in the history. Only the newest WORD_WINDOW matter for unlocking.
+  // Share of attempts on a single key that must be right before it can gate an unlock.
+  const KEY_ACCURACY_TARGET = 0.9;
+  // Completed words kept in the history. Only the newest LESSON_SIZE matter for unlocking.
   const HISTORY_LIMIT = 100;
   // Time added to a stroke's average for each miss on it.
   const MISS_PENALTY_MS = 800;
@@ -33,6 +34,8 @@
   const SAMPLES_TO_LEARN = 5;
   // Longest word a lesson will use.
   const MAX_WORD_LENGTH = 9;
+  // Finished lessons' accuracy kept for the streak summary.
+  const LESSON_HISTORY_LIMIT = 10;
 
   // Words per minute needed to unlock the next key. It rises from 30 to 50 as keys are added.
   function wpmTarget(unlocked) {
@@ -53,7 +56,7 @@
   }
 
   function emptyProgress() {
-    return { unlocked: START_KEYS, keys: {}, words: [] };
+    return { unlocked: START_KEYS, keys: {}, words: [], lessonHistory: [] };
   }
 
   // Keeps only the fields the engine understands, so an old or damaged save still loads.
@@ -78,6 +81,11 @@
       progress.words = saved.words
         .filter((word) => word && Number.isFinite(word.ms) && Number.isFinite(word.strokes) && Number.isFinite(word.misses))
         .slice(-HISTORY_LIMIT);
+    }
+    if (Array.isArray(saved.lessonHistory)) {
+      progress.lessonHistory = saved.lessonHistory
+        .filter((entry) => entry && Number.isFinite(entry.accuracy))
+        .slice(-LESSON_HISTORY_LIMIT);
     }
     return progress;
   }
@@ -114,9 +122,9 @@
   }
 
   // Speed and accuracy over the newest words, since the last unlock. `count` is how many
-  // words were used, which can be fewer than WORD_WINDOW early on.
+  // words were used, which can be fewer than LESSON_SIZE early on.
   function windowStats(progress) {
-    const recent = progress.words.slice(-WORD_WINDOW);
+    const recent = progress.words.slice(-LESSON_SIZE);
     const count = recent.length;
     const ms = recent.reduce((sum, word) => sum + word.ms, 0);
     const strokes = recent.reduce((sum, word) => sum + word.strokes, 0);
@@ -128,13 +136,33 @@
     };
   }
 
+  // A single number combining speed and accuracy, for the HUD's Score metric.
+  function scoreFor(stats) {
+    return Math.round(stats.wpm * stats.accuracy * 20);
+  }
+
+  // Share of attempts on one key that were right, cumulative over all play. 1 (not a gate)
+  // if the key has never been attempted.
+  function keyAccuracy(progress, name) {
+    const stat = progress.keys[name];
+    if (!stat) return 1;
+    const total = stat.samples + stat.misses;
+    return total > 0 ? stat.samples / total : 1;
+  }
+
+  // Whether every unlocked key is individually accurate enough, not just the overall average.
+  function keysAccurateEnough(progress) {
+    return unlockedNames(progress).every((name) => keyAccuracy(progress, name) >= KEY_ACCURACY_TARGET);
+  }
+
   // Whether the newest words are fast and accurate enough to unlock the next key.
   function canUnlock(progress) {
     if (progress.unlocked >= KEY_ORDER.length) return false;
     const stats = windowStats(progress);
-    return stats.count >= WORD_WINDOW
+    return stats.count >= LESSON_SIZE
       && stats.wpm >= wpmTarget(progress.unlocked)
-      && stats.accuracy >= ACCURACY_TARGET;
+      && stats.accuracy >= ACCURACY_TARGET
+      && keysAccurateEnough(progress);
   }
 
   // Unlocks the next key if canUnlock says so. Starts counting words again from zero.
@@ -144,6 +172,15 @@
     progress.unlocked += 1;
     progress.words = [];
     return true;
+  }
+
+  // Appends a finished lesson's accuracy to the short streak history shown on the HUD.
+  function recordLesson(progress, stats) {
+    progress.lessonHistory.push({ accuracy: stats.accuracy });
+    if (progress.lessonHistory.length > LESSON_HISTORY_LIMIT) {
+      progress.lessonHistory.splice(0, progress.lessonHistory.length - LESSON_HISTORY_LIMIT);
+    }
+    return progress;
   }
 
   // 0 to 1: how well a key is known. Shown as the key's bar. Needs samples as well as speed.
@@ -200,7 +237,7 @@
   // in `avoid` (recently typed) are skipped where possible. `random` returns [0, 1).
   function pickWords(words, progress, slotIndex, options = {}) {
     const random = options.random || Math.random;
-    const count = options.count || BATCH_WORDS;
+    const count = options.count || LESSON_SIZE;
     const avoid = new Set(options.avoid || []);
     const mask = unlockedMask(progress, slotIndex);
     const focus = focusKey(progress);
@@ -217,9 +254,9 @@
     const pool = eligible.filter(({ word }) => !avoid.has(word.text));
     const source = pool.length >= count ? pool : eligible;
     const weighted = source.map(({ word, usable }) => {
-      // Plover's dictionary has no word frequencies, so prefer words that look common:
-      // medium length and one stroke. Rare-looking words are the main thing to avoid.
-      let weight = lengthWeight(word.text.length) * strokeWeight(usable[0].length);
+      // Plover's dictionary has no word frequencies, so combine a real frequency list with
+      // the length/stroke heuristics: medium length, one stroke, and actually common words win.
+      let weight = lengthWeight(word.text.length) * strokeWeight(usable[0].length) * WordFreq.freqWeight(word.text);
       if (usable.some((strokes) => strokes.some((bits) => bits & focusBit))) weight *= 4;
       return { word, weight };
     });
@@ -244,12 +281,18 @@
     return chosen;
   }
 
+  // One full lesson's worth of words: exactly LESSON_SIZE words (fewer only if the unlocked
+  // keys cannot make that many distinct eligible words).
+  function startLesson(words, progress, slotIndex, options = {}) {
+    return pickWords(words, progress, slotIndex, { ...options, count: LESSON_SIZE });
+  }
+
   return {
     KEY_ORDER,
     START_KEYS,
-    BATCH_WORDS,
-    WORD_WINDOW,
+    LESSON_SIZE,
     ACCURACY_TARGET,
+    KEY_ACCURACY_TARGET,
     TARGET_MS,
     emptyProgress,
     normalize,
@@ -257,14 +300,18 @@
     recordChord,
     recordWord,
     windowStats,
+    scoreFor,
+    keyAccuracy,
     canUnlock,
     wpmTarget,
     confidence,
     unlockIfReady,
+    recordLesson,
     focusKey,
     unlockedMask,
     usableVariants,
     displayVariants,
     pickWords,
+    startLesson,
   };
 });

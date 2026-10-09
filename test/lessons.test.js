@@ -61,30 +61,58 @@ test('the words-per-minute target rises from 30 to 50 as keys are added', () => 
 });
 
 test('windowStats reports words per minute and accuracy over the newest words', () => {
-  const progress = typeWords(lessons.emptyProgress(), lessons.WORD_WINDOW, { ms: 1000 });
+  const progress = typeWords(lessons.emptyProgress(), lessons.LESSON_SIZE, { ms: 1000 });
   const stats = lessons.windowStats(progress);
-  assert.equal(stats.count, lessons.WORD_WINDOW);
+  assert.equal(stats.count, lessons.LESSON_SIZE);
   assert.equal(Math.round(stats.wpm), 60);
   assert.equal(stats.accuracy, 1);
 });
 
+test('scoreFor combines speed and accuracy into one number', () => {
+  assert.equal(lessons.scoreFor({ wpm: 60, accuracy: 1 }), 1200);
+  assert.equal(lessons.scoreFor({ wpm: 0, accuracy: 1 }), 0);
+});
+
 test('a key unlocks only with enough fast, accurate words', () => {
   // Too few words
-  assert.equal(lessons.canUnlock(typeWords(lessons.emptyProgress(), lessons.WORD_WINDOW - 1)), false);
+  assert.equal(lessons.canUnlock(typeWords(lessons.emptyProgress(), lessons.LESSON_SIZE - 1)), false);
   // Fast enough but not accurate enough
-  assert.equal(lessons.canUnlock(typeWords(lessons.emptyProgress(), lessons.WORD_WINDOW, { misses: 1 })), false);
+  assert.equal(lessons.canUnlock(typeWords(lessons.emptyProgress(), lessons.LESSON_SIZE, { misses: 1 })), false);
   // Accurate but too slow: 12 words per minute
-  assert.equal(lessons.canUnlock(typeWords(lessons.emptyProgress(), lessons.WORD_WINDOW, { ms: 5000 })), false);
+  assert.equal(lessons.canUnlock(typeWords(lessons.emptyProgress(), lessons.LESSON_SIZE, { ms: 5000 })), false);
   // Fast and accurate
-  assert.equal(lessons.canUnlock(typeWords(lessons.emptyProgress(), lessons.WORD_WINDOW)), true);
+  assert.equal(lessons.canUnlock(typeWords(lessons.emptyProgress(), lessons.LESSON_SIZE)), true);
+});
+
+test('a key with poor accuracy of its own blocks unlock even if the overall window looks fine', () => {
+  const progress = typeWords(lessons.emptyProgress(), lessons.LESSON_SIZE);
+  // Overall accuracy is still 1 (misses are recorded on the key, not on recordWord here),
+  // but the key itself has failed more than it has succeeded.
+  for (let i = 0; i < 9; i++) lessons.recordChord(progress, ['T-'], 500, false);
+  lessons.recordChord(progress, ['T-'], 500, true);
+  assert.equal(lessons.keyAccuracy(progress, 'T-') < lessons.KEY_ACCURACY_TARGET, true);
+  assert.equal(lessons.canUnlock(progress), false);
 });
 
 test('unlockIfReady adds one key and starts the word count again', () => {
-  const progress = typeWords(lessons.emptyProgress(), lessons.WORD_WINDOW);
+  const progress = typeWords(lessons.emptyProgress(), lessons.LESSON_SIZE);
   assert.equal(lessons.unlockIfReady(progress), true);
   assert.equal(progress.unlocked, lessons.START_KEYS + 1);
   assert.deepEqual(progress.words, []);
   assert.equal(lessons.unlockIfReady(progress), false);
+});
+
+test('recordLesson keeps a capped history of finished lessons for the streak summary', () => {
+  const progress = lessons.emptyProgress();
+  for (let i = 0; i < 15; i++) lessons.recordLesson(progress, { accuracy: 0.9 });
+  assert.equal(progress.lessonHistory.length, 10);
+});
+
+test('startLesson returns up to LESSON_SIZE words', () => {
+  const progress = lessons.emptyProgress();
+  for (let i = lessons.START_KEYS; i < lessons.KEY_ORDER.length; i++) progress.unlocked = i + 1;
+  const lesson = lessons.startLesson(words, progress, slotIndex, { random: () => 0.3 });
+  assert.ok(lesson.length > 0 && lesson.length <= lessons.LESSON_SIZE);
 });
 
 test('focusKey is the unlocked key that needs the most practice', () => {

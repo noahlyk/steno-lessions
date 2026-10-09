@@ -78,9 +78,10 @@
     slotByName: new Map(), // "S-" -> { name, sound, label }
     hints: readHints(),
     keyEls: new Map(), // event.code -> element
-    queue: [], // words in the stream, oldest first
-    index: 0, // the word being typed
-    recent: [], // words used lately, so the stream does not repeat them
+    lesson: [], // the current lesson's words, fixed size
+    index: 0, // the word being typed, within the lesson
+    recent: [], // words used lately, so lessons do not repeat them
+    lastLessonStats: null, // previous lesson's windowStats, for the HUD deltas
     candidates: [], // stroke sequences still possible for the current word
     strokeIdx: 0,
     wordMisses: 0,
@@ -92,9 +93,11 @@
     pressed: new Set(),
     chordBits: 0,
     chordStart: 0,
+    paused: false,
+    idleTimer: null,
   };
 
-  const currentWord = () => state.queue[state.index];
+  const currentWord = () => state.lesson[state.index];
   // The stroke sequence to show: the first one that is still possible
   const shownStrokes = () => state.candidates[0] || [];
   const currentStroke = () => shownStrokes()[state.strokeIdx] || 0;
@@ -196,21 +199,14 @@
     }
   }
 
-  // The word stream: keep at least 20 words ahead of the word being typed.
-  function ensureQueue() {
-    while (state.queue.length - state.index < 20) {
-      const picks = L.pickWords(state.data.words, state.progress, state.slotIndex, { avoid: state.recent });
-      if (picks.length === 0) break;
-      state.queue.push(...picks);
-      state.recent.push(...picks.map((word) => word.text));
-      state.recent.splice(0, Math.max(0, state.recent.length - 60));
-    }
-    // Forget words well behind, so the page stays light
-    const drop = state.index - 40;
-    if (drop > 0) {
-      state.queue.splice(0, drop);
-      state.index -= drop;
-    }
+  // Starts a new fixed-size lesson. Called on load and whenever the previous lesson finishes,
+  // so a freshly unlocked key's words show up in the very next lesson with no special-casing.
+  function nextLesson() {
+    const picks = L.startLesson(state.data.words, state.progress, state.slotIndex, { avoid: state.recent });
+    state.lesson = picks;
+    state.index = 0;
+    state.recent.push(...picks.map((word) => word.text));
+    state.recent.splice(0, Math.max(0, state.recent.length - 60));
   }
 
   // Only stroke sequences that use unlocked keys are shown, so a word never asks for a locked key
@@ -232,11 +228,9 @@
     const stream = $('stream');
     stream.textContent = '';
     const mask = unlockedMask();
-    const from = Math.max(0, state.index - 30);
-    const to = Math.min(state.queue.length, state.index + 25);
     let current = null;
-    for (let i = from; i < to; i++) {
-      const word = state.queue[i];
+    for (let i = 0; i < state.lesson.length; i++) {
+      const word = state.lesson[i];
       const isCurrent = i === state.index;
       const strokes = isCurrent ? shownStrokes() : L.displayVariants(word, mask)[0] || [];
       const cell = document.createElement('div');
@@ -283,42 +277,106 @@
       stream.appendChild(cell);
     }
     if (current) {
-      // Scroll so the word being typed sits on the second row
-      const rowGap = parseFloat(getComputedStyle(stream).rowGap) || 0;
-      stream.scrollTop = Math.max(0, current.offsetTop - current.offsetHeight - rowGap);
+      // Keep the word being typed in view as the bounded lesson fills the box.
+      current.scrollIntoView({ block: 'nearest' });
     }
   }
 
-  function renderKeyList() {
-    const list = $('key-list');
+  // A green-up/red-down delta span, like keybr's metrics row. `fmt` formats the raw delta value.
+  function deltaSpan(delta, fmt) {
+    if (delta === null || !Number.isFinite(delta) || Math.abs(delta) < 1e-9) return '';
+    const kind = delta > 0 ? 'good' : 'bad';
+    const arrow = delta > 0 ? '↑' : '↓';
+    return ` <span class="delta ${kind}">(${arrow}${fmt(Math.abs(delta))})</span>`;
+  }
+
+  // Row 1: speed/accuracy/score for the lesson in progress, with the delta against the
+  // previous finished lesson.
+  function renderMetrics() {
+    const { progress } = state;
+    const stats = L.windowStats(progress);
+    const prev = state.lastLessonStats;
+    const wpm = stats.count ? Math.round(stats.wpm) : 0;
+    const accuracy = stats.count ? stats.accuracy * 100 : 100;
+    const score = stats.count ? L.scoreFor(stats) : 0;
+    const wpmDelta = prev ? wpm - Math.round(prev.wpm) : null;
+    const accDelta = prev ? accuracy - prev.accuracy * 100 : null;
+    const scoreDelta = prev ? score - L.scoreFor(prev) : null;
+    $('metrics').innerHTML =
+      `<span>Speed: <strong>${wpm}wpm</strong>${deltaSpan(wpmDelta, (v) => `${v.toFixed(1)}wpm`)}</span>` +
+      `<span>Accuracy: <strong>${accuracy.toFixed(2)}%</strong>${deltaSpan(accDelta, (v) => `${v.toFixed(2)}%`)}</span>` +
+      `<span>Score: <strong>${score.toLocaleString()}</strong>${deltaSpan(scoreDelta, (v) => v.toLocaleString())}</span>`;
+    $('lesson-note').textContent = `Lesson: ${state.index}/${state.lesson.length}`;
+  }
+
+  // Row 2: one chip per key, unlocked keys tinted by confidence, the focus key outlined.
+  function renderKeyChips() {
+    const { progress } = state;
+    const focus = L.focusKey(progress);
+    const list = $('key-chips');
     list.textContent = '';
     L.KEY_ORDER.forEach((name, index) => {
-      const item = document.createElement('li');
-      item.classList.toggle('locked', index >= state.progress.unlocked);
-      const confidence = L.confidence(state.progress, name);
-      const slot = state.slotByName.get(name);
-      item.innerHTML =
-        `<span class="name">${escapeHtml(S.displayName(name))}</span>` +
-        `<span class="sound">${escapeHtml(slot.sound)}<span class="keyname"> · ${escapeHtml(slot.label)}</span></span>` +
-        `<span class="bar"><i style="width:${Math.round(confidence * 100)}%"></i></span>`;
-      list.appendChild(item);
+      const chip = document.createElement('li');
+      const unlocked = index < progress.unlocked;
+      chip.classList.toggle('locked', !unlocked);
+      chip.classList.toggle('current', unlocked && name === focus);
+      if (unlocked) chip.style.setProperty('--conf', L.confidence(progress, name).toFixed(2));
+      chip.textContent = S.displayName(name);
+      chip.title = state.slotByName.get(name)?.sound || name;
+      list.appendChild(chip);
     });
   }
 
-  function renderStats() {
+  // Row 3: the key most in need of practice right now, and what we know about it.
+  function renderCurrentKey() {
     const { progress } = state;
-    const stats = L.windowStats(progress);
-    const wpm = stats.count ? Math.round(stats.wpm) : '—';
-    const accuracy = stats.count ? Math.round(stats.accuracy * 100) : 100;
-    const target = L.wpmTarget(progress.unlocked);
-    const need = Math.round(L.ACCURACY_TARGET * 100);
-    $('stats').innerHTML =
-      `<span>keys <strong>${progress.unlocked}</strong>/${L.KEY_ORDER.length}</span>` +
-      `<span title="current / needed">wpm <strong>${wpm}</strong>/${target}</span>` +
-      `<span title="current / needed">accuracy <strong>${accuracy}%</strong>/${need}%</span>` +
-      `<span>words <strong>${state.typed}</strong></span>`;
-    $('window-note').textContent =
-      `${stats.count}/${L.WORD_WINDOW} words to the next key`;
+    const name = L.focusKey(progress);
+    const el = $('current-key');
+    if (!name) {
+      el.innerHTML = '<span class="muted">No key to focus on yet.</span>';
+      return;
+    }
+    const stat = progress.keys[name];
+    const slot = state.slotByName.get(name);
+    const label = `<span class="chip-name">${escapeHtml(S.displayName(name))}</span>`;
+    if (!stat || stat.ewmaMs === null || stat.samples < 5) {
+      el.innerHTML = `${label} <span class="muted">Not calibrated, need more samples.</span>`;
+      return;
+    }
+    const wpmLike = Math.round(60000 / stat.ewmaMs);
+    const accuracy = Math.round(L.keyAccuracy(progress, name) * 100);
+    el.innerHTML =
+      `${label} <span class="muted">${wpmLike}wpm, ${accuracy}% accuracy${slot ? ` (${escapeHtml(slot.sound)})` : ''}.</span>`;
+  }
+
+  // Row 4: a short rollup of recent lesson accuracy, like keybr's accuracy-streak line.
+  function renderAccuracyStreak() {
+    const history = state.progress.lessonHistory || [];
+    const el = $('accuracy-streak');
+    if (history.length === 0) {
+      el.textContent = 'No accuracy streaks.';
+      return;
+    }
+    // Group consecutive lessons that round to the same accuracy percentage into streaks,
+    // newest first, same spirit as "One lesson with 97% accuracy. 2 lessons with 95% accuracy."
+    const rounded = history.map((entry) => Math.round(entry.accuracy * 100)).reverse();
+    const groups = [];
+    for (const pct of rounded) {
+      const last = groups[groups.length - 1];
+      if (last && last.pct === pct) last.count += 1;
+      else groups.push({ pct, count: 1 });
+    }
+    el.textContent = groups
+      .slice(0, 3)
+      .map((g) => `${g.count} lesson${g.count === 1 ? '' : 's'} with ${g.pct}% accuracy`)
+      .join('. ') + '.';
+  }
+
+  function renderHud() {
+    renderMetrics();
+    renderKeyChips();
+    renderCurrentKey();
+    renderAccuracyStreak();
   }
 
   // Keyboard and stream together, so held keys show on the word as well
@@ -330,8 +388,7 @@
   function refresh() {
     renderStream();
     renderKeyboard();
-    renderKeyList();
-    renderStats();
+    renderHud();
   }
 
   async function saveProgress() {
@@ -351,9 +408,11 @@
   // A pause between chords longer than this is not typing, so it is left out of the word's time (ms)
   const IDLE_MS = 3000;
   // After a mistake, the stroke must be typed right this many times in a row to go on
-  const DRILL_REPEATS = 3;
+  const DRILL_REPEATS = 1;
   // The * stroke, which is undo in Plover (the T key on this layout)
   const UNDO = S.parseStroke('*');
+  // No keypress for this long (or the tab losing focus) blurs the practice screen until resumed
+  const PAUSE_IDLE_MS = 8000;
 
   function finishChord() {
     if (!currentWord()) return;
@@ -427,16 +486,24 @@
   function wordDone() {
     L.recordWord(state.progress, { ms: state.wordMs, strokes: state.strokeIdx, misses: state.wordMisses });
     state.typed += 1;
-    if (L.unlockIfReady(state.progress)) {
-      const name = L.KEY_ORDER[state.progress.unlocked - 1];
-      const sound = state.slotByName.get(name)?.sound || '';
-      setFeedback(
-        `Unlocked ${S.displayName(name)} (${sound}). Next: ${L.wpmTarget(state.progress.unlocked)} wpm.`,
-        'good',
-      );
-    }
     state.index += 1;
-    ensureQueue();
+
+    if (state.index >= state.lesson.length) {
+      // Lesson boundary: this is the one point unlocks are decided, the stats window is
+      // judged, and the word queue is reset, so a fresh lesson always reflects any new key.
+      state.lastLessonStats = L.windowStats(state.progress);
+      L.recordLesson(state.progress, state.lastLessonStats);
+      if (L.unlockIfReady(state.progress)) {
+        const name = L.KEY_ORDER[state.progress.unlocked - 1];
+        const sound = state.slotByName.get(name)?.sound || '';
+        setFeedback(
+          `Unlocked ${S.displayName(name)} (${sound}). Next: ${L.wpmTarget(state.progress.unlocked)} wpm.`,
+          'good',
+        );
+      }
+      nextLesson();
+    }
+
     startWord();
     saveProgress();
     refresh();
@@ -450,9 +517,38 @@
     renderChord();
   }
 
+  // Blurs the practice screen after a stretch of no activity, or as soon as the tab loses
+  // focus. Resuming (a keypress, or the tab becoming visible again) clears it and restarts
+  // the idle clock.
+  function pause() {
+    if (state.paused) return;
+    state.paused = true;
+    clearChord();
+    document.body.classList.add('paused');
+    $('pause-overlay').classList.remove('hidden');
+  }
+
+  function resume() {
+    if (!state.paused) return;
+    state.paused = false;
+    document.body.classList.remove('paused');
+    $('pause-overlay').classList.add('hidden');
+    scheduleIdle();
+  }
+
+  function scheduleIdle() {
+    if (state.idleTimer) clearTimeout(state.idleTimer);
+    state.idleTimer = setTimeout(pause, PAUSE_IDLE_MS);
+  }
+
   // Keys are only taken over when they are steno keys. Everything else, and anything with
   // Ctrl, Alt or Meta held, passes through to the browser and the system untouched.
   document.addEventListener('keydown', (event) => {
+    if (state.paused) {
+      resume();
+      return;
+    }
+    scheduleIdle();
     if (event.repeat || event.ctrlKey || event.altKey || event.metaKey) return;
     const info = state.infoByCode.get(event.code);
     if (!info) return;
@@ -472,8 +568,10 @@
     renderChord();
   });
 
-  window.addEventListener('blur', clearChord);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) clearChord(); });
+  window.addEventListener('blur', () => { clearChord(); pause(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { clearChord(); pause(); } else { resume(); }
+  });
 
   async function getJson(url) {
     const response = await fetch(url);
@@ -510,9 +608,10 @@
       applyHints();
       refresh();
     });
-    ensureQueue();
+    nextLesson();
     startWord();
     refresh();
+    scheduleIdle();
   }
 
   init();
