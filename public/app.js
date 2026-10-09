@@ -360,7 +360,7 @@
     const recent = history.slice(-10);
     const accuracy = recent.map((entry) => `${Math.round(entry.accuracy * 100)}%`).join(', ');
     const wpm = recent.map((entry) => `${Math.round(entry.wpm)}wpm`).join(', ');
-    el.textContent = `Accuracy: ${accuracy} — Speed: ${wpm}`;
+    el.textContent = `${accuracy} — Speed: ${wpm}`;
   }
 
   function renderHud() {
