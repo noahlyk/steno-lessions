@@ -263,6 +263,7 @@
           const isHeld = (held & (1 << state.slotIndex.get(name))) !== 0;
           const group = S.keyGroup(name);
           ch.className = `ch${group ? ` ${group}` : ''}${isHeld ? ' held' : ''}`;
+          if (group) ch.style.setProperty('--shade', S.keyShade(name));
           ch.textContent = state.slotByName.get(name)?.sound || name;
           sound.appendChild(ch);
         }

@@ -154,5 +154,20 @@
     return 'right';
   }
 
-  return { SLOTS, parseStroke, parseLayout, namesInBits, buildWords, popcount, renderStroke, displayName, keyGroup };
+  // Where a key sits within its own group (left/middle/right), as a fraction from 0 (first
+  // key in the group) to 1 (last). Slot order follows the physical key columns, so two keys
+  // close in this fraction are easy mistakes to make with one finger - shading by it lets the
+  // page tint each key in a group slightly differently without leaving the group's colour.
+  function keyShade(name) {
+    const index = slotIndex.get(name);
+    if (index === undefined || index === NUMBER_SLOT) return 0;
+    const [start, end] = index < LEFT_END ? [0, LEFT_END] : index < 12 ? [LEFT_END, 12] : [12, NUMBER_SLOT];
+    const size = end - start;
+    return size > 1 ? (index - start) / (size - 1) : 0;
+  }
+
+  return {
+    SLOTS, parseStroke, parseLayout, namesInBits, buildWords, popcount, renderStroke, displayName,
+    keyGroup, keyShade,
+  };
 });

@@ -19,6 +19,7 @@
   --down: #f2b84b;
   --good: #2e8b57;
   --bad: #c0392b;
+  --shade-mix: black;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -42,6 +43,7 @@
     --down: #d9a03a;
     --good: #5fbf85;
     --bad: #e07165;
+    --shade-mix: white;
   }
 }
 
@@ -65,6 +67,7 @@
   --down: #d9a03a;
   --good: #5fbf85;
   --bad: #e07165;
+  --shade-mix: white;
 }
 
 * { box-sizing: border-box; }
@@ -282,10 +285,13 @@ body.paused #practice .feedback {
 /* Each stroke of a word is a group. A divider line and extra space between groups show where
    one chord ends and the next begins */
 .snd + .snd, .kc + .kc { border-left: 2px solid var(--divider); }
-/* Left-hand keys, vowels and right-hand keys each have their own colour in the stream */
-.ch.left { color: var(--left-ink); }
-.ch.middle { color: var(--middle-ink); }
-.ch.right { color: var(--right-ink); }
+/* Left-hand keys, vowels and right-hand keys each have their own colour in the stream.
+   --shade (0 = first key in the group, 1 = last) tints each key's own colour a bit lighter
+   or darker, so two keys in the same group - easy to blur together with one finger - still
+   read as different without leaving the group's hue. */
+.ch.left { color: color-mix(in srgb, var(--left-ink) 100%, var(--shade-mix) calc(var(--shade, 0) * 60%)); }
+.ch.middle { color: color-mix(in srgb, var(--middle-ink) 100%, var(--shade-mix) calc(var(--shade, 0) * 60%)); }
+.ch.right { color: color-mix(in srgb, var(--right-ink) 100%, var(--shade-mix) calc(var(--shade, 0) * 60%)); }
 /* Sounds keep their group colour while typed. A key held right turns its sound green. */
 .snd.current .ch.held { color: var(--good); }
 /* Wrong keys, inserted right into the sound sequence instead of floating off to the side */
