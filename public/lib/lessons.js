@@ -74,6 +74,7 @@
           samples: Math.max(0, Number(stat.samples) || 0),
           ewmaMs: typeof stat.ewmaMs === 'number' ? stat.ewmaMs : null,
           misses: Math.max(0, Number(stat.misses) || 0),
+          ewmaAcc: typeof stat.ewmaAcc === 'number' ? Math.min(1, Math.max(0, stat.ewmaAcc)) : null,
         };
       }
     }
@@ -98,9 +99,14 @@
   // A miss adds a penalty to the average rather than counting as a sample.
   function recordChord(progress, names, ms, correct) {
     for (const name of names) {
-      const stat = progress.keys[name] || { samples: 0, ewmaMs: null, misses: 0 };
+      const stat = progress.keys[name] || { samples: 0, ewmaMs: null, misses: 0, ewmaAcc: null };
       const cost = correct ? ms : ms + MISS_PENALTY_MS;
       stat.ewmaMs = stat.ewmaMs === null ? cost : stat.ewmaMs * 0.7 + cost * 0.3;
+      // Recency-weighted, like ewmaMs, so a rough patch while still learning a key fades out
+      // instead of permanently capping it (keybr treats a key as "green" once it's currently
+      // good, not based on its all-time average).
+      const hit = correct ? 1 : 0;
+      stat.ewmaAcc = stat.ewmaAcc === null ? hit : stat.ewmaAcc * 0.85 + hit * 0.15;
       if (correct) {
         stat.samples += 1;
       } else {
@@ -141,13 +147,12 @@
     return Math.round(stats.wpm * stats.accuracy * 20);
   }
 
-  // Share of attempts on one key that were right, cumulative over all play. 1 (not a gate)
-  // if the key has never been attempted.
+  // Recency-weighted share of attempts on one key that were right. 1 (not a gate) if the
+  // key has never been attempted, so it doesn't block unlocking before it's even practiced.
   function keyAccuracy(progress, name) {
     const stat = progress.keys[name];
-    if (!stat) return 1;
-    const total = stat.samples + stat.misses;
-    return total > 0 ? stat.samples / total : 1;
+    if (!stat || stat.ewmaAcc === null) return 1;
+    return stat.ewmaAcc;
   }
 
   // Whether every unlocked key is individually accurate enough, not just the overall average.

@@ -391,7 +391,21 @@
     renderHud();
   }
 
+  // The server (public/api) is one way to run this app; a static host with no server, such
+  // as GitHub Pages, is the other. `state.static` picks localStorage/the bundled data file
+  // once the server's own endpoints turn out to be unavailable.
+  const PROGRESS_KEY = 'steno-lessons-progress';
+
   async function saveProgress() {
+    if (state.static) {
+      try {
+        localStorage.setItem(PROGRESS_KEY, JSON.stringify(state.progress));
+      } catch (error) {
+        console.error('could not save progress', error);
+        setFeedback('Progress could not be saved (browser storage unavailable).', 'bad');
+      }
+      return;
+    }
     try {
       const response = await fetch('/api/progress', {
         method: 'PUT',
@@ -583,17 +597,34 @@
   async function init() {
     try {
       state.data = await getJson('/api/data');
+      state.static = false;
     } catch (error) {
-      $('error').hidden = false;
-      $('error').textContent = `Could not load steno data: ${error.message}`;
-      return;
+      // No server (e.g. a static GitHub Pages deploy): fall back to the bundled snapshot
+      // built by `npm run build:data`, and keep progress in this browser's localStorage.
+      try {
+        state.data = await getJson('data/bundle.json');
+        state.static = true;
+      } catch (fallbackError) {
+        $('error').hidden = false;
+        $('error').textContent = `Could not load steno data: ${error.message}`;
+        return;
+      }
     }
-    try {
-      state.progress = L.normalize(await getJson('/api/progress'));
-    } catch (error) {
-      $('error').hidden = false;
-      $('error').textContent = `Progress not loaded (${error.message}). Starting fresh.`;
-      state.progress = L.emptyProgress();
+    if (state.static) {
+      try {
+        const saved = localStorage.getItem(PROGRESS_KEY);
+        state.progress = L.normalize(saved ? JSON.parse(saved) : null);
+      } catch (error) {
+        state.progress = L.emptyProgress();
+      }
+    } else {
+      try {
+        state.progress = L.normalize(await getJson('/api/progress'));
+      } catch (error) {
+        $('error').hidden = false;
+        $('error').textContent = `Progress not loaded (${error.message}). Starting fresh.`;
+        state.progress = L.emptyProgress();
+      }
     }
     buildIndexes(state.data.layout);
     buildKeyboard();

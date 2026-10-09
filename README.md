@@ -21,6 +21,23 @@ Settings come from environment variables:
 | `STENO_LESSONS_DATA` | `~/.config/steno-lessons/progress.json` | Where progress is saved |
 | `PORT` | `4321` | Port to listen on |
 
+## Hosting it statically (e.g. GitHub Pages)
+
+`npm start` needs keymux installed locally, since it asks keymux for your layout and dictionary
+at request time. A static host (GitHub Pages, or just opening `public/index.html`) can't run
+keymux, so instead you bake a snapshot of that data into the repo once, and the page falls
+back to it automatically whenever `/api/*` isn't there to answer:
+
+```sh
+npm run build:data   # writes public/data/bundle.json from your local keymux
+git add public/data/bundle.json
+```
+
+Re-run it whenever your layout or dictionary changes. Progress is then kept in that browser's
+`localStorage` instead of a server-side file, so it's per-browser rather than shared across
+devices. `.github/workflows/pages.yml` publishes `public/` to GitHub Pages on every push to
+`main` — it doesn't run keymux itself, so `bundle.json` has to already be committed.
+
 ## No steno mode needed
 
 Keep your keyboard in its normal mode. The page reads the keys as you press them, so there is nothing to switch. Steno mode only matters for typing into other apps.
@@ -39,13 +56,18 @@ Keys are taken over only when they are steno keys. Ctrl, Alt and Meta combos, an
 
 Steno keys show the sound big, with the letter you press small in the corner. Keys without a steno meaning are light gray. Steno keys you have not unlocked yet are darker gray, and show no sound until they unlock.
 
-## How keys unlock
+## Lessons and how keys unlock
+
+Words come in fixed-size lessons (30 words). Finishing a lesson is the one moment stats get
+judged, a key either unlocks or doesn't, and the next lesson's words are picked — so a lesson
+is always exactly the window a key's unlock is judged on, following keybr's own approach.
 
 - You start with 6 keys: `E`, `A`, `T`, `S`, `K` and `-T`. Keys are then introduced in the order in `public/lib/lessons.js` (`KEY_ORDER`).
-- The next key unlocks when your newest 40 words are both fast and accurate:
+- The next key unlocks when the lesson you just finished was fast and accurate enough, and every unlocked key is currently (not all-time) solid:
   - Speed starts at 30 words per minute and rises to 50 as keys are added. Each word's time counts only active typing: pauses longer than 3 seconds, and time with the page hidden or unfocused, are left out.
-  - Accuracy must be at least 95% of strokes on the first try.
-- After a key unlocks, the word count starts again from zero.
+  - Overall accuracy must be at least 95% of strokes on the first try across the lesson.
+  - Each already-unlocked key also needs its own recent accuracy at or above 90%. This is recency-weighted (like a key's speed average), so a rough patch while a key was still new fades out once you're typing it well — it doesn't permanently block every future unlock the way an all-time average would.
+- After a key unlocks, the word count starts again from zero for the new lesson.
 
 ## Limitations
 

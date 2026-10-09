@@ -41,7 +41,7 @@ test('normalize keeps good fields and drops damaged ones', () => {
     words: [{ ms: 800, strokes: 2, misses: 0 }, { ms: 'x' }],
   });
   assert.equal(progress.unlocked, lessons.KEY_ORDER.length);
-  assert.deepEqual(progress.keys['A-'], { samples: 2, ewmaMs: 900, misses: 1 });
+  assert.deepEqual(progress.keys['A-'], { samples: 2, ewmaMs: 900, misses: 1, ewmaAcc: null });
   assert.equal(progress.keys.NOPE, undefined);
   assert.deepEqual(progress.words, [{ ms: 800, strokes: 2, misses: 0 }]);
 });
@@ -92,6 +92,18 @@ test('a key with poor accuracy of its own blocks unlock even if the overall wind
   lessons.recordChord(progress, ['T-'], 500, true);
   assert.equal(lessons.keyAccuracy(progress, 'T-') < lessons.KEY_ACCURACY_TARGET, true);
   assert.equal(lessons.canUnlock(progress), false);
+});
+
+test('a rough patch on a key fades out once it is typed well consistently, unlike an all-time average', () => {
+  const progress = typeWords(lessons.emptyProgress(), lessons.LESSON_SIZE);
+  for (let i = 0; i < 9; i++) lessons.recordChord(progress, ['T-'], 500, false);
+  lessons.recordChord(progress, ['T-'], 500, true);
+  assert.equal(lessons.canUnlock(progress), false);
+  // Keep typing T- correctly: its recency-weighted accuracy should recover and stop
+  // permanently blocking every future unlock, the way a lifetime average would.
+  for (let i = 0; i < 40; i++) lessons.recordChord(progress, ['T-'], 500, true);
+  assert.equal(lessons.keyAccuracy(progress, 'T-') >= lessons.KEY_ACCURACY_TARGET, true);
+  assert.equal(lessons.canUnlock(progress), true);
 });
 
 test('unlockIfReady adds one key and starts the word count again', () => {
