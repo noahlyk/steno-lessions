@@ -526,47 +526,124 @@ kbd {
   main { padding-left: 16px; padding-right: 16px; }
 }
 
+/* Pushed well below the fold and kept small, so it's there if you go looking for it but
+   never competes with the practice area above. */
 .footer {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 14px;
-  padding: 16px 24px 28px;
+  gap: 10px;
+  margin-top: 220px;
+  padding: 10px 24px 40px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 11px;
+  opacity: 0.8;
 }
 
 .footer-btn {
   background: var(--card);
+  color: var(--muted);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.footer-btn:hover {
+  border-color: rgba(255, 255, 255, 0.3);
   color: var(--ink);
+}
+
+.footer-import {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.import-box {
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font: inherit;
+  font-size: 11px;
+  width: 140px;
+  caret-color: transparent;
+}
+
+.import-box:focus {
+  outline: 2px solid rgba(255, 255, 255, 0.25);
+}
+
+.footer-links {
+  margin-left: auto;
+}
+
+.footer-links a {
+  color: var(--muted);
+}
+
+.footer-links a:hover {
+  color: var(--ink);
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 50;
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-card {
+  background: var(--card);
   border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 20px 24px;
+  max-width: 360px;
+  color: var(--ink);
+}
+
+.modal-card h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+.modal-card p {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.modal-actions button {
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 8px;
   padding: 6px 12px;
   font-size: 13px;
   cursor: pointer;
 }
 
-.footer-btn:hover {
-  border-color: rgba(255, 255, 255, 0.3);
+.modal-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
-.footer-import {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.import-box {
-  background: var(--card);
-  color: var(--ink);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
-  padding: 6px 10px;
-  font: inherit;
-  width: 220px;
-  caret-color: transparent;
-}
-
-.import-box:focus {
-  outline: 2px solid rgba(255, 255, 255, 0.25);
+#rewind-proceed {
+  border-color: var(--bad);
+  color: var(--bad);
 }

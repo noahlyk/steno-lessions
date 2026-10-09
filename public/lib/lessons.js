@@ -56,7 +56,7 @@
   }
 
   function emptyProgress() {
-    return { unlocked: START_KEYS, keys: {}, words: [], lessonHistory: [] };
+    return { unlocked: START_KEYS, keys: {}, words: [], lessonHistory: [], totalTyped: 0 };
   }
 
   // Keeps only the fields the engine understands, so an old or damaged save still loads.
@@ -87,6 +87,9 @@
       progress.lessonHistory = saved.lessonHistory
         .filter((entry) => entry && Number.isFinite(entry.accuracy) && Number.isFinite(entry.wpm))
         .slice(-LESSON_HISTORY_LIMIT);
+    }
+    if (Number.isFinite(saved.totalTyped)) {
+      progress.totalTyped = Math.max(0, Math.floor(saved.totalTyped));
     }
     return progress;
   }
@@ -124,6 +127,11 @@
     if (progress.words.length > HISTORY_LIMIT) {
       progress.words.splice(0, progress.words.length - HISTORY_LIMIT);
     }
+    // Counts every word ever finished, never trimmed or reset (unlike `words`, which is just
+    // the current judging window). This is a forward-only fingerprint: real play only ever
+    // increases it, so a pasted-in save with a lower count than what's already here can only
+    // be older progress, not something earned since.
+    progress.totalTyped += 1;
     return progress;
   }
 
@@ -295,6 +303,13 @@
     return pickWords(words, progress, slotIndex, { ...options, count: LESSON_SIZE });
   }
 
+  // Whether loading `incoming` in place of `current` would erase real progress. totalTyped
+  // only ever grows during real play, so a lower count can only mean older, replayed, or
+  // tampered-with data, never progress earned since.
+  function isRewind(current, incoming) {
+    return (incoming.totalTyped || 0) < (current.totalTyped || 0);
+  }
+
   return {
     KEY_ORDER,
     START_KEYS,
@@ -321,5 +336,6 @@
     displayVariants,
     pickWords,
     startLesson,
+    isRewind,
   };
 });

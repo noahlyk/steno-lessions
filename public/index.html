@@ -42,12 +42,28 @@
   </main>
 
   <footer class="footer">
-    <button type="button" class="footer-btn" id="export-progress">Copy progress to clipboard</button>
+    <button type="button" class="footer-btn" id="export-progress">Copy progress</button>
     <label class="footer-import">
-      Paste progress to import:
+      Import:
       <input type="text" id="import-progress" class="import-box" autocomplete="off" spellcheck="false" placeholder="Paste here&hellip;">
     </label>
+    <span class="footer-links">
+      <a href="https://github.com/noahlyk/steno-lessions" target="_blank" rel="noopener">GitHub</a>
+      &middot;
+      inspired by <a href="https://www.keybr.com/" target="_blank" rel="noopener">keybr.com</a>'s excellent one-key-at-a-time lessons
+    </span>
   </footer>
+
+  <div id="rewind-modal" class="modal hidden">
+    <div class="modal-card">
+      <h2>This would undo progress</h2>
+      <p>The progress you pasted is older than what's already here. Your imported progress is outdated.</p>
+      <div class="modal-actions">
+        <button type="button" id="rewind-cancel">Cancel</button>
+        <button type="button" id="rewind-proceed" disabled>Proceed with rewind (3)</button>
+      </div>
+    </div>
+  </div>
 
   <script src="lib/steno.js"></script>
   <script src="lib/word-frequency.js"></script>

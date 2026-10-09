@@ -641,6 +641,16 @@
       }
     });
 
+    function applyImport(incoming) {
+      state.progress = incoming;
+      state.recent = [];
+      nextLesson();
+      startWord();
+      saveProgress();
+      refresh();
+      setFeedback('Progress imported from clipboard.', 'good');
+    }
+
     const importBox = $('import-progress');
     importBox.addEventListener('keydown', (event) => {
       event.stopPropagation();
@@ -652,18 +662,60 @@
       event.stopPropagation();
       const text = event.clipboardData.getData('text');
       importBox.value = '';
+      let incoming;
       try {
-        state.progress = L.normalize(JSON.parse(text));
-        state.recent = [];
-        nextLesson();
-        startWord();
-        saveProgress();
-        refresh();
-        setFeedback('Progress imported from clipboard.', 'good');
+        incoming = L.normalize(JSON.parse(text));
       } catch (error) {
         setFeedback(`Could not import progress: ${error.message}`, 'bad');
+        return;
+      }
+      // Fast-forwarding (as much or more play than what's already here) applies instantly.
+      // Rewinding (less play) can only be a mistake or outdated data, so it needs a
+      // deliberate, slowed-down confirmation instead of silently erasing progress.
+      if (L.isRewind(state.progress, incoming)) {
+        confirmRewind(() => applyImport(incoming));
+      } else {
+        applyImport(incoming);
       }
     });
+  }
+
+  // A 3-second-locked confirmation modal, used only when an import would undo progress.
+  function confirmRewind(onProceed) {
+    const modal = $('rewind-modal');
+    const proceedBtn = $('rewind-proceed');
+    const cancelBtn = $('rewind-cancel');
+    modal.classList.remove('hidden');
+    let secondsLeft = 3;
+    proceedBtn.disabled = true;
+    proceedBtn.textContent = `Proceed with rewind (${secondsLeft})`;
+    const tick = setInterval(() => {
+      secondsLeft -= 1;
+      if (secondsLeft <= 0) {
+        clearInterval(tick);
+        proceedBtn.disabled = false;
+        proceedBtn.textContent = 'Proceed with rewind';
+      } else {
+        proceedBtn.textContent = `Proceed with rewind (${secondsLeft})`;
+      }
+    }, 1000);
+
+    function close() {
+      clearInterval(tick);
+      modal.classList.add('hidden');
+      proceedBtn.removeEventListener('click', onProceedClick);
+      cancelBtn.removeEventListener('click', onCancelClick);
+    }
+    function onProceedClick() {
+      close();
+      onProceed();
+    }
+    function onCancelClick() {
+      close();
+      setFeedback('Import cancelled.', 'bad');
+    }
+    proceedBtn.addEventListener('click', onProceedClick);
+    cancelBtn.addEventListener('click', onCancelClick);
   }
 
   init();

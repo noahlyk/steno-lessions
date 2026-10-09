@@ -106,6 +106,24 @@ test('a rough patch on a key fades out once it is typed well consistently, unlik
   assert.equal(lessons.canUnlock(progress), true);
 });
 
+test('totalTyped only ever grows, even across unlocks that reset the judging window', () => {
+  const progress = typeWords(lessons.emptyProgress(), lessons.LESSON_SIZE);
+  assert.equal(progress.totalTyped, lessons.LESSON_SIZE);
+  lessons.unlockIfReady(progress);
+  assert.equal(progress.words.length, 0);
+  assert.equal(progress.totalTyped, lessons.LESSON_SIZE);
+  typeWords(progress, 5);
+  assert.equal(progress.totalTyped, lessons.LESSON_SIZE + 5);
+});
+
+test('isRewind flags a pasted save with less play than what is already here', () => {
+  const ahead = typeWords(lessons.emptyProgress(), 50);
+  const behind = typeWords(lessons.emptyProgress(), 10);
+  assert.equal(lessons.isRewind(ahead, behind), true);
+  assert.equal(lessons.isRewind(behind, ahead), false);
+  assert.equal(lessons.isRewind(ahead, ahead), false);
+});
+
 test('unlockIfReady adds one key and starts the word count again', () => {
   const progress = typeWords(lessons.emptyProgress(), lessons.LESSON_SIZE);
   assert.equal(lessons.unlockIfReady(progress), true);
