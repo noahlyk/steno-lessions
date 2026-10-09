@@ -188,13 +188,16 @@
     return progress;
   }
 
-  // 0 to 1: how well a key is known. Shown as the key's bar. Needs samples as well as speed.
+  // 0 to 1: how well a key is known. Shown as the key's bar, and used to pick the key that
+  // most needs practice. Needs samples and speed, and accuracy: a key typed fast but wrong
+  // a lot is not actually known, even though it would look full on speed alone.
   function confidence(progress, name) {
     const stat = progress.keys[name];
     if (!stat || stat.ewmaMs === null) return 0;
     const enough = Math.min(1, stat.samples / SAMPLES_TO_LEARN);
     const speed = Math.min(1, TARGET_MS / stat.ewmaMs);
-    return enough * speed;
+    const accuracy = Math.min(1, keyAccuracy(progress, name) / KEY_ACCURACY_TARGET);
+    return enough * speed * accuracy;
   }
 
   // The unlocked key that needs the most practice. Ties go to the one introduced later.
