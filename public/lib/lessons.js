@@ -85,7 +85,7 @@
     }
     if (Array.isArray(saved.lessonHistory)) {
       progress.lessonHistory = saved.lessonHistory
-        .filter((entry) => entry && Number.isFinite(entry.accuracy))
+        .filter((entry) => entry && Number.isFinite(entry.accuracy) && Number.isFinite(entry.wpm))
         .slice(-LESSON_HISTORY_LIMIT);
     }
     return progress;
@@ -181,7 +181,7 @@
 
   // Appends a finished lesson's accuracy to the short streak history shown on the HUD.
   function recordLesson(progress, stats) {
-    progress.lessonHistory.push({ accuracy: stats.accuracy });
+    progress.lessonHistory.push({ accuracy: stats.accuracy, wpm: stats.wpm });
     if (progress.lessonHistory.length > LESSON_HISTORY_LIMIT) {
       progress.lessonHistory.splice(0, progress.lessonHistory.length - LESSON_HISTORY_LIMIT);
     }

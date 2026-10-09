@@ -349,27 +349,18 @@
       `${label} <span class="muted">${wpmLike}wpm, ${accuracy}% accuracy${slot ? ` (${escapeHtml(slot.sound)})` : ''}.</span>`;
   }
 
-  // Row 4: a short rollup of recent lesson accuracy, like keybr's accuracy-streak line.
+  // Row 4: recent lesson accuracy and speed, oldest to newest.
   function renderAccuracyStreak() {
     const history = state.progress.lessonHistory || [];
     const el = $('accuracy-streak');
     if (history.length === 0) {
-      el.textContent = 'No accuracy streaks.';
+      el.textContent = 'No lessons finished yet.';
       return;
     }
-    // Group consecutive lessons that round to the same accuracy percentage into streaks,
-    // newest first, same spirit as "One lesson with 97% accuracy. 2 lessons with 95% accuracy."
-    const rounded = history.map((entry) => Math.round(entry.accuracy * 100)).reverse();
-    const groups = [];
-    for (const pct of rounded) {
-      const last = groups[groups.length - 1];
-      if (last && last.pct === pct) last.count += 1;
-      else groups.push({ pct, count: 1 });
-    }
-    el.textContent = groups
-      .slice(0, 3)
-      .map((g) => `${g.count} lesson${g.count === 1 ? '' : 's'} with ${g.pct}% accuracy`)
-      .join('. ') + '.';
+    const recent = history.slice(-10);
+    const accuracy = recent.map((entry) => `${Math.round(entry.accuracy * 100)}%`).join(', ');
+    const wpm = recent.map((entry) => `${Math.round(entry.wpm)}wpm`).join(', ');
+    el.textContent = `Accuracy: ${accuracy} — Speed: ${wpm}`;
   }
 
   function renderHud() {

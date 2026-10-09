@@ -116,7 +116,7 @@ test('unlockIfReady adds one key and starts the word count again', () => {
 
 test('recordLesson keeps a capped history of finished lessons for the streak summary', () => {
   const progress = lessons.emptyProgress();
-  for (let i = 0; i < 15; i++) lessons.recordLesson(progress, { accuracy: 0.9 });
+  for (let i = 0; i < 15; i++) lessons.recordLesson(progress, { accuracy: 0.9, wpm: 40 });
   assert.equal(progress.lessonHistory.length, 10);
 });
 
