@@ -92,6 +92,8 @@
     lastChordEnd: null,
     failures: [],
     retrying: false, // true while the current chord is held, so old errors stay hidden
+    errorsVisible: false, // auto-hidden ERROR_VISIBLE_MS after a stroke ends, win or lose
+    errorTimer: null,
     drill: 0,
     typed: 0, // words finished this session
     pressed: new Set(),
@@ -234,6 +236,8 @@
     state.lastChordEnd = null;
     state.failures = [];
     state.retrying = false;
+    clearTimeout(state.errorTimer);
+    state.errorsVisible = false;
     state.drill = 0;
   }
 
@@ -307,7 +311,9 @@
           // next attempt - it looks exactly like a clean first try.
           const soundOf = (name) => state.slotByName.get(name)?.sound || name;
           const wrongNames = S.namesInBits(held & ~bits);
-          const failedNames = state.retrying ? [] : state.failures.flatMap((chord) => S.namesInBits(chord));
+          const failedNames = state.retrying || !state.errorsVisible
+            ? []
+            : state.failures.flatMap((chord) => S.namesInBits(chord));
           const insertions = [...failedNames, ...wrongNames].map((name) => ({
             at: state.slotIndex.get(name),
             text: soundOf(name),
@@ -473,6 +479,18 @@
   const IDLE_MS = 3000;
   // After a mistake, the stroke must be typed right this many times in a row to go on
   const DRILL_REPEATS = 1;
+  // How long a mistake stays visible after the stroke that made it ends, win or lose - past
+  // this, it just makes the line harder to read, so it fades even if you haven't retried yet.
+  const ERROR_VISIBLE_MS = 200;
+
+  function armErrorTimer() {
+    clearTimeout(state.errorTimer);
+    state.errorsVisible = true;
+    state.errorTimer = setTimeout(() => {
+      state.errorsVisible = false;
+      refresh();
+    }, ERROR_VISIBLE_MS);
+  }
   // The * stroke, which is undo in Plover (the T key on this layout)
   const UNDO = S.parseStroke('*');
 
@@ -519,6 +537,7 @@
       L.recordChord(state.progress, S.namesInBits(target), ms, false);
       state.failures.push(chord);
       state.drill = DRILL_REPEATS;
+      armErrorTimer();
       setFeedback(
         `Needs ${S.renderStroke(target)} (${namesOf(target)}). You pressed ${namesOf(chord)}. ` +
           `Type it ${state.drill} more times in a row to go on, or press * (T key) to undo.`,
