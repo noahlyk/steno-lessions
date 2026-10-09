@@ -256,12 +256,15 @@
       wordEl.className = 'w';
       wordEl.textContent = word.text;
       cell.appendChild(wordEl);
+      // Every cell gets a preview row, even empty, so the current word's cell is not taller
+      // than its neighbours - otherwise the row shifts down as soon as a word is selected,
+      // which breaks reading left to right.
+      const preview = document.createElement('span');
+      preview.className = 'preview';
       if (isCurrent) {
         // A faint preview, above the word, of what letting go right now would actually
         // resolve to - steno's own translation of the held chord, not just its sounds.
         const held = heldBits();
-        const preview = document.createElement('span');
-        preview.className = 'preview';
         if (held) {
           const continues = state.candidates.some((seq) => seq[state.strokeIdx] === held);
           if (continues) {
@@ -278,8 +281,8 @@
             }
           }
         }
-        cell.appendChild(preview);
       }
+      cell.appendChild(preview);
       strokes.forEach((bits, column) => {
         const status = !isCurrent ? '' : column < state.strokeIdx ? 'done' : column === state.strokeIdx ? 'current' : '';
         const sound = document.createElement('span');
