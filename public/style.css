@@ -231,7 +231,7 @@ body.paused #practice .feedback {
    and keys run as three parallel lines. The layout is the same with Key hints on or off. */
 .stream {
   position: relative;
-  height: 330px;
+  height: 170px;
   overflow: hidden;
   display: flex;
   flex-wrap: wrap;
@@ -524,4 +524,49 @@ kbd {
   .key .sound { font-size: 7px; }
   .kb-row { gap: 3px; }
   main { padding-left: 16px; padding-right: 16px; }
+}
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 24px 28px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.footer-btn {
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.footer-btn:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.footer-import {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.import-box {
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font: inherit;
+  width: 220px;
+  caret-color: transparent;
+}
+
+.import-box:focus {
+  outline: 2px solid rgba(255, 255, 255, 0.25);
 }

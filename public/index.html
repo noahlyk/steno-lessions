@@ -12,7 +12,7 @@
       <span class="brand">steno<span>-lessons</span></span>
       <span class="metrics" id="metrics"></span>
       <span class="lesson-note" id="lesson-note"></span>
-      <label class="toggle"><input type="checkbox" id="hints" checked> Key hints</label>
+      <label class="toggle"><input type="checkbox" id="hints"> Key hints</label>
     </div>
     <ul class="hud-row key-chips" id="key-chips"></ul>
     <div class="hud-row hud-line"><span class="hud-label">Current key:</span> <span id="current-key"></span></div>
@@ -40,6 +40,14 @@
       </p>
     </section>
   </main>
+
+  <footer class="footer">
+    <button type="button" class="footer-btn" id="export-progress">Copy progress to clipboard</button>
+    <label class="footer-import">
+      Paste progress to import:
+      <input type="text" id="import-progress" class="import-box" autocomplete="off" spellcheck="false" placeholder="Paste here&hellip;">
+    </label>
+  </footer>
 
   <script src="lib/steno.js"></script>
   <script src="lib/word-frequency.js"></script>

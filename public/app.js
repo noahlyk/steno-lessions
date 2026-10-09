@@ -59,9 +59,9 @@
   const HINTS_KEY = "steno-lessons.hints";
   function readHints() {
     try {
-      return localStorage.getItem(HINTS_KEY) !== "off";
+      return localStorage.getItem(HINTS_KEY) === "on";
     } catch {
-      return true;
+      return false;
     }
   }
   function applyHints() {
@@ -94,7 +94,6 @@
     chordBits: 0,
     chordStart: 0,
     paused: false,
-    idleTimer: null,
   };
 
   const currentWord = () => state.lesson[state.index];
@@ -416,8 +415,6 @@
   const DRILL_REPEATS = 1;
   // The * stroke, which is undo in Plover (the T key on this layout)
   const UNDO = S.parseStroke('*');
-  // No keypress for this long (or the tab losing focus) blurs the practice screen until resumed
-  const PAUSE_IDLE_MS = 8000;
 
   function finishChord() {
     if (!currentWord()) return;
@@ -522,9 +519,9 @@
     renderChord();
   }
 
-  // Blurs the practice screen after a stretch of no activity, or as soon as the tab loses
-  // focus. Resuming (a keypress, or the tab becoming visible again) clears it and restarts
-  // the idle clock.
+  // Blurs the practice screen as soon as the tab loses focus or is hidden, so time away from
+  // the page is not counted as typing (clearChord already drops lastChordEnd for that).
+  // Resuming happens on the tab becoming visible again, or on the next keypress.
   function pause() {
     if (state.paused) return;
     state.paused = true;
@@ -538,22 +535,17 @@
     state.paused = false;
     document.body.classList.remove('paused');
     $('pause-overlay').classList.add('hidden');
-    scheduleIdle();
-  }
-
-  function scheduleIdle() {
-    if (state.idleTimer) clearTimeout(state.idleTimer);
-    state.idleTimer = setTimeout(pause, PAUSE_IDLE_MS);
   }
 
   // Keys are only taken over when they are steno keys. Everything else, and anything with
   // Ctrl, Alt or Meta held, passes through to the browser and the system untouched.
   document.addEventListener('keydown', (event) => {
+    // Space scrolls the page by default; that's never wanted here, accidental or not.
+    if (event.code === 'Space') event.preventDefault();
     if (state.paused) {
       resume();
       return;
     }
-    scheduleIdle();
     if (event.repeat || event.ctrlKey || event.altKey || event.metaKey) return;
     const info = state.infoByCode.get(event.code);
     if (!info) return;
@@ -633,7 +625,45 @@
     nextLesson();
     startWord();
     refresh();
-    scheduleIdle();
+    setupTransfer();
+  }
+
+  // Export: one click copies the whole progress object to the clipboard. Import: the box
+  // looks like a normal text field, but every key is swallowed except paste, and a paste is
+  // applied immediately (no separate submit step, as if it had also pressed enter for you).
+  function setupTransfer() {
+    $('export-progress').addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(JSON.stringify(state.progress));
+        setFeedback('Progress copied to clipboard.', 'good');
+      } catch (error) {
+        setFeedback(`Could not copy progress: ${error.message}`, 'bad');
+      }
+    });
+
+    const importBox = $('import-progress');
+    importBox.addEventListener('keydown', (event) => {
+      event.stopPropagation();
+      const isPaste = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'v';
+      if (!isPaste) event.preventDefault();
+    });
+    importBox.addEventListener('paste', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const text = event.clipboardData.getData('text');
+      importBox.value = '';
+      try {
+        state.progress = L.normalize(JSON.parse(text));
+        state.recent = [];
+        nextLesson();
+        startWord();
+        saveProgress();
+        refresh();
+        setFeedback('Progress imported from clipboard.', 'good');
+      } catch (error) {
+        setFeedback(`Could not import progress: ${error.message}`, 'bad');
+      }
+    });
   }
 
   init();
