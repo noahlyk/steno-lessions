@@ -1,6 +1,6 @@
 {
   "name": "steno-lessons",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Learn steno one key at a time on a QWERTY keyboard, with a hardcoded layout and dictionary",
   "main": "server.js",
