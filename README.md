@@ -1,3 +1,5 @@
+# [▶ Open steno-lessons](https://noahlyk.github.io/steno-lessions/)
+
 Learn steno one key at a time, the way keybr and monkeytype teach typing. You type on your normal keyboard. The page turns your key presses into steno strokes, and the keyboard shows which keys are steno keys and what sound each one makes.
 
 It reads the layout and the Plover dictionary from keymux, so the lessons match what keymux types.
