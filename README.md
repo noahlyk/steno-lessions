@@ -2,11 +2,11 @@
 
 Learn steno one key at a time, the way keybr and monkeytype teach typing. You type on your normal keyboard. The page turns your key presses into steno strokes, and the keyboard shows which keys are steno keys and what sound each one makes.
 
-It reads the layout and the Plover dictionary from keymux, so the lessons match what keymux types.
+The layout and dictionary are hardcoded into `public/data/bundle.json` — no external program or dictionary install needed, and the same data is used whether you run the page through `server.js` or open it as plain static files (e.g. GitHub Pages).
 
 ## Run it
 
-Needs Node 18 or newer, and keymux on your `PATH` with its steno dictionary installed (`keymux steno setup`).
+Needs Node 18 or newer.
 
 ```sh
 npm start
@@ -18,27 +18,16 @@ Settings come from environment variables:
 
 | Variable | Default | What it does |
 | --- | --- | --- |
-| `KEYMUX_BIN` | `keymux` | The keymux binary to run for `keymux steno layout` |
-| `KEYMUX_STENO_DIR` | `~/.config/keymux/steno` | Folder with `main.json` and `user.json` (`user.json` wins) |
 | `STENO_LESSONS_DATA` | `~/.config/steno-lessons/progress.json` | Where progress is saved |
 | `PORT` | `4321` | Port to listen on |
 
 ## Hosting it statically (e.g. GitHub Pages)
 
-`npm start` needs keymux installed locally, since it asks keymux for your layout and dictionary
-at request time. A static host (GitHub Pages, or just opening `public/index.html`) can't run
-keymux, so instead you bake a snapshot of that data into the repo once, and the page falls
-back to it automatically whenever `/api/*` isn't there to answer:
-
-```sh
-npm run build:data   # writes public/data/bundle.json from your local keymux
-git add public/data/bundle.json
-```
-
-Re-run it whenever your layout or dictionary changes. Progress is then kept in that browser's
-`localStorage` instead of a server-side file, so it's per-browser rather than shared across
-devices. `.github/workflows/pages.yml` publishes `public/` to GitHub Pages on every push to
-`main` — it doesn't run keymux itself, so `bundle.json` has to already be committed.
+`public/` is already a complete static site — `server.js` only adds a place to save progress
+to a file. Serve `public/` as-is (or just open `public/index.html`) and the page falls back to
+keeping progress in that browser's `localStorage` instead, so it's per-browser rather than
+shared across devices. `.github/workflows/pages.yml` publishes `public/` to GitHub Pages on
+every push to `main`.
 
 ## No steno mode needed
 
@@ -73,8 +62,8 @@ is always exactly the window a key's unlock is judged on, following keybr's own 
 
 ## Limitations
 
-- The word list is every plain lowercase word in the dictionary. Plover's dictionary has no frequency data, so the picker favors medium-length, single-stroke words instead of common words. A frequency list would make lessons better.
-- Only the built-in QWERTY layout is supported. Your `layout_overrides` in keymux are not read yet. Your steno layer has none, so the layout shown is your keymux layout.
+- The word list is every plain lowercase word in the dictionary, weighted by length, stroke count, and a bundled common-word frequency list (`public/lib/word-frequency.js`).
+- Only the one hardcoded QWERTY layout is supported. To change it, edit `public/data/bundle.json` directly (or regenerate it from whatever produced it originally) and commit the new file.
 - Chords are read from your browser's key events, so keyboards that can't register all the keys at once will not work for every stroke.
 
 ## Development
@@ -82,5 +71,3 @@ is always exactly the window a key's unlock is judged on, following keybr's own 
 ```sh
 npm test
 ```
-
-The tests use the real keymux layout output saved in `test/fixtures/layout.txt`. Regenerate it with `keymux steno layout > test/fixtures/layout.txt` if the layout changes.

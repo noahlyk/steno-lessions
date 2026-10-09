@@ -2,12 +2,11 @@
   "name": "steno-lessons",
   "version": "0.1.0",
   "private": true,
-  "description": "Learn steno one key at a time on a QWERTY keyboard, using keymux's layout and dictionary",
+  "description": "Learn steno one key at a time on a QWERTY keyboard, with a hardcoded layout and dictionary",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test test/*.test.js",
-    "build:data": "node scripts/build-data.js"
+    "test": "node --test test/*.test.js"
   },
   "engines": {
     "node": ">=18"

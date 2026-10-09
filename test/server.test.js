@@ -5,19 +5,9 @@ const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
 
-// The server reads its settings when it loads, so point them at fixtures first.
+// The server reads its settings when it loads, so point them at a fixture first.
 const dir = fs.mkdtempSync(path.join(process.env.CLAUDE_JOB_DIR ? path.join(process.env.CLAUDE_JOB_DIR, 'tmp') : os.tmpdir(), 'steno-lessons-test-'));
 fs.mkdirSync(dir, { recursive: true });
-const layoutFile = path.join(__dirname, 'fixtures', 'layout.txt');
-const fakeKeymux = path.join(dir, 'keymux');
-fs.writeFileSync(fakeKeymux, `#!/bin/sh\ncat "${layoutFile}"\n`);
-fs.chmodSync(fakeKeymux, 0o755);
-const stenoDir = path.join(dir, 'steno');
-fs.mkdirSync(stenoDir);
-fs.writeFileSync(path.join(stenoDir, 'main.json'), JSON.stringify({ KAT: 'cat', '-PB': 'and', 'TEFT': 'Test' }));
-fs.writeFileSync(path.join(stenoDir, 'user.json'), JSON.stringify({ '-PB': 'an' }));
-process.env.KEYMUX_BIN = fakeKeymux;
-process.env.KEYMUX_STENO_DIR = stenoDir;
 process.env.STENO_LESSONS_DATA = path.join(dir, 'progress.json');
 
 const { handle } = require('../server.js');
@@ -36,19 +26,13 @@ test.after(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test('GET /api/data returns the layout and the words from the dictionary', async () => {
-  const response = await fetch(`${base}/api/data`);
+test('serves the hardcoded layout and dictionary bundle as a plain static file', async () => {
+  const response = await fetch(`${base}/data/bundle.json`);
   assert.equal(response.status, 200);
   const body = await response.json();
   assert.equal(body.layout.slots.length, 23);
-  const words = Object.fromEntries(body.words.map((word) => [word.text, word]));
-  assert.deepEqual(words.cat.shown, ['KAT']);
-  // user.json overrides main.json
-  assert.deepEqual(words.an.shown, ['-PB']);
-  assert.equal(words.and, undefined);
-  // Capitalized entries are left out
-  assert.equal(words.Test, undefined);
-  assert.deepEqual(body.dictionaries, ['main.json', 'user.json']);
+  assert.ok(Array.isArray(body.words) && body.words.length > 0);
+  assert.ok(body.words.every((word) => typeof word.text === 'string' && Array.isArray(word.shown)));
 });
 
 test('progress round-trips through PUT and GET', async () => {

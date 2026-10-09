@@ -1,21 +1,16 @@
-// Local server for steno-lessons. It asks keymux for the steno layout, reads the Plover
-// dictionary that keymux installed, serves the page, and saves lesson progress.
+// Local server for steno-lessons. Serves the page, the hardcoded layout/dictionary bundle,
+// and saves lesson progress to a file. No external process or dictionary install needed.
 //
 // Environment:
-//   KEYMUX_BIN          keymux binary to run (default: keymux)
-//   KEYMUX_STENO_DIR    folder with main.json and user.json (default: ~/.config/keymux/steno)
 //   STENO_LESSONS_DATA  file that stores progress (default: ~/.config/steno-lessons/progress.json)
 //   PORT                port to listen on (default: 4321)
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const { execFileSync } = require('node:child_process');
-const steno = require('./public/lib/steno.js');
 
 const PUBLIC = path.join(__dirname, 'public');
-const KEYMUX_BIN = process.env.KEYMUX_BIN || 'keymux';
-const STENO_DIR = process.env.KEYMUX_STENO_DIR || path.join(os.homedir(), '.config', 'keymux', 'steno');
+const BUNDLE_FILE = path.join(PUBLIC, 'data', 'bundle.json');
 const DATA_FILE =
   process.env.STENO_LESSONS_DATA || path.join(os.homedir(), '.config', 'steno-lessons', 'progress.json');
 const PORT = Number(process.env.PORT) || 4321;
@@ -28,33 +23,9 @@ const TYPES = {
   '.json': 'application/json; charset=utf-8',
 };
 
-// Reads the keymux layout and dictionary once at startup. Both come from keymux, so the
-// lessons match what keymux types.
-function loadData() {
-  const layoutText = execFileSync(KEYMUX_BIN, ['steno', 'layout'], { encoding: 'utf8' });
-  const layout = steno.parseLayout(layoutText);
-
-  let entries = {};
-  const files = ['main.json', 'user.json'];
-  const loaded = [];
-  for (const file of files) {
-    const full = path.join(STENO_DIR, file);
-    if (!fs.existsSync(full)) continue;
-    const text = fs.readFileSync(full, 'utf8').trim();
-    // user.json overrides main.json, as keymux does
-    if (text) Object.assign(entries, JSON.parse(text));
-    loaded.push(file);
-  }
-  if (loaded.length === 0) {
-    throw new Error(`no Plover dictionary in ${STENO_DIR}; run \`${KEYMUX_BIN} steno setup\``);
-  }
-  const words = steno.buildWords(Object.entries(entries));
-  return { layout, words, dictionaries: loaded };
-}
-
 let cache;
 function data() {
-  if (!cache) cache = loadData();
+  if (!cache) cache = JSON.parse(fs.readFileSync(BUNDLE_FILE, 'utf8'));
   return cache;
 }
 
@@ -108,15 +79,6 @@ function serveStatic(req, res, pathname) {
 async function handle(req, res) {
   const { pathname } = new URL(req.url, 'http://localhost');
 
-  if (pathname === '/api/data' && req.method === 'GET') {
-    try {
-      const { layout, words, dictionaries } = data();
-      return sendJson(res, 200, { layout, words, dictionaries });
-    } catch (error) {
-      return sendJson(res, 500, { error: error.message });
-    }
-  }
-
   if (pathname === '/api/progress' && req.method === 'GET') {
     try {
       return sendJson(res, 200, readProgress() || {});
@@ -153,4 +115,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { loadData, handle };
+module.exports = { handle };

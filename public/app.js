@@ -578,34 +578,26 @@
   }
 
   async function init() {
+    // The layout and dictionary are hardcoded data, the same on a plain static host (e.g.
+    // GitHub Pages) as behind server.js, so there's exactly one place to load them from.
     try {
-      state.data = await getJson('/api/data');
+      state.data = await getJson('data/bundle.json');
+    } catch (error) {
+      $('error').hidden = false;
+      $('error').textContent = `Could not load steno data: ${error.message}`;
+      return;
+    }
+    // Progress still has two homes: server.js's /api/progress when it's there to answer, or
+    // this browser's localStorage on a static host with no server at all.
+    try {
+      state.progress = L.normalize(await getJson('/api/progress'));
       state.static = false;
     } catch (error) {
-      // No server (e.g. a static GitHub Pages deploy): fall back to the bundled snapshot
-      // built by `npm run build:data`, and keep progress in this browser's localStorage.
-      try {
-        state.data = await getJson('data/bundle.json');
-        state.static = true;
-      } catch (fallbackError) {
-        $('error').hidden = false;
-        $('error').textContent = `Could not load steno data: ${error.message}`;
-        return;
-      }
-    }
-    if (state.static) {
+      state.static = true;
       try {
         const saved = localStorage.getItem(PROGRESS_KEY);
         state.progress = L.normalize(saved ? JSON.parse(saved) : null);
-      } catch (error) {
-        state.progress = L.emptyProgress();
-      }
-    } else {
-      try {
-        state.progress = L.normalize(await getJson('/api/progress'));
-      } catch (error) {
-        $('error').hidden = false;
-        $('error').textContent = `Progress not loaded (${error.message}). Starting fresh.`;
+      } catch (localError) {
         state.progress = L.emptyProgress();
       }
     }
