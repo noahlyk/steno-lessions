@@ -535,7 +535,11 @@
       // as one inaccuracy for the word, not one per attempt.
       state.wordMisses = 1;
       L.recordChord(state.progress, S.namesInBits(target), ms, false);
-      state.failures.push(chord);
+      // Only the latest mistake is ever shown or undoable - repeating the same wrong chord,
+      // or making a different one, replaces it rather than piling on top of it. DRILL_REPEATS
+      // only ever asks for "1 more right in a row" regardless of how many tries it took to get
+      // there, so there is never more than one live mistake to track at once.
+      state.failures = [chord];
       state.drill = DRILL_REPEATS;
       armErrorTimer();
       setFeedback(
