@@ -107,6 +107,20 @@ body {
 .hud-label { color: var(--ink); font-weight: 600; }
 .hud-line .muted { color: var(--muted); }
 .hud-line .chip-name { font-family: ui-monospace, Menlo, monospace; font-weight: 600; color: var(--ink); }
+.hud-line .bad { color: var(--bad); }
+.hud-line:empty { display: none; }
+
+/* Last 10 lessons' speed and accuracy, as two rows so the same lesson's numbers line up in
+   one column instead of living in two separate, unaligned comma lists. */
+.lesson-history-grid {
+  display: grid;
+  row-gap: 2px;
+  column-gap: 10px;
+  align-items: baseline;
+  font-variant-numeric: tabular-nums;
+}
+.lh-row-label { grid-column: 1; }
+.lh-cell { color: var(--muted); text-align: right; }
 
 .key-chips {
   list-style: none;

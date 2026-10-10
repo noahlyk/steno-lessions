@@ -414,25 +414,69 @@
       `${label} <span class="muted">${wpmLike}wpm, ${accuracy}% accuracy${slot ? ` (${escapeHtml(slot.sound)})` : ''}.</span>`;
   }
 
-  // Row 4: recent lesson accuracy and speed, oldest to newest.
-  function renderAccuracyStreak() {
-    const history = state.progress.lessonHistory || [];
-    const el = $('accuracy-streak');
+  // The last 10 finished lessons, as two rows (Speed above Accuracy) in a grid, one column
+  // per lesson, so the same lesson's two numbers line up vertically instead of being read
+  // off two separate comma lists that don't visually pair up.
+  function renderLessonHistory() {
+    const history = (state.progress.lessonHistory || []).slice(-10);
+    const el = $('lesson-history');
+    el.textContent = '';
     if (history.length === 0) {
-      el.textContent = 'No lessons finished yet.';
+      el.innerHTML = '<span class="hud-label">Lessons:</span> <span class="muted">None finished yet.</span>';
       return;
     }
-    const recent = history.slice(-10);
-    const accuracy = recent.map((entry) => `${Math.round(entry.accuracy * 100)}%`).join(', ');
-    const wpm = recent.map((entry) => `${Math.round(entry.wpm)}wpm`).join(', ');
-    el.textContent = `${accuracy} — Speed: ${wpm}`;
+    const grid = document.createElement('div');
+    grid.className = 'lesson-history-grid';
+    grid.style.gridTemplateColumns = `auto repeat(${history.length}, auto)`;
+    const addRow = (label, cells, cls) => {
+      const labelEl = document.createElement('span');
+      labelEl.className = 'hud-label lh-row-label';
+      labelEl.textContent = label;
+      grid.appendChild(labelEl);
+      for (const text of cells) {
+        const cell = document.createElement('span');
+        cell.className = `lh-cell${cls ? ` ${cls}` : ''}`;
+        cell.textContent = text;
+        grid.appendChild(cell);
+      }
+    };
+    addRow('Speed:', history.map((entry) => `${Math.round(entry.wpm)}`));
+    addRow('Accuracy:', history.map((entry) => `${Math.round(entry.accuracy * 100)}%`));
+    el.appendChild(grid);
+  }
+
+  // Overall window stats (speed, accuracy, word count) can all clear their targets while one
+  // specific unlocked key is still individually below KEY_ACCURACY_TARGET - that key alone
+  // blocks the unlock, invisibly, unless called out here.
+  function renderUnlockStatus() {
+    const { progress } = state;
+    const el = $('unlock-status');
+    if (progress.unlocked >= L.KEY_ORDER.length) {
+      el.textContent = '';
+      return;
+    }
+    const stats = L.windowStats(progress);
+    const overallReady = stats.count >= L.LESSON_SIZE
+      && stats.wpm >= L.wpmTarget(progress.unlocked)
+      && stats.accuracy >= L.ACCURACY_TARGET;
+    const blocking = L.unlockedNames(progress).filter((name) => L.keyAccuracy(progress, name) < L.KEY_ACCURACY_TARGET);
+    if (overallReady && blocking.length > 0) {
+      const names = blocking
+        .map((name) => `${S.displayName(name)} (${Math.round(L.keyAccuracy(progress, name) * 100)}%)`)
+        .join(', ');
+      el.innerHTML = `<span class="hud-label">Blocking unlock:</span> <span class="bad">${escapeHtml(names)} - ` +
+        `needs ${Math.round(L.KEY_ACCURACY_TARGET * 100)}%+ on each key, not just overall.</span>`;
+    } else {
+      el.textContent = '';
+    }
   }
 
   function renderHud() {
     renderMetrics();
     renderKeyChips();
     renderCurrentKey();
-    renderAccuracyStreak();
+    renderUnlockStatus();
+    renderLessonHistory();
   }
 
   // Keyboard and stream together, so held keys show on the word as well
