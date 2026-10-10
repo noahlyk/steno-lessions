@@ -155,10 +155,16 @@
   }
 
   // Slot-index pairs that sit in the same physical column (top row over home row, e.g. the
-  // W/S or E/D keys) or side-by-side on the same row (the vowel pairs C/V and N/M) and so get
-  // fingered together as a unit rather than as two separate keys. Keyed both ways for O(1)
-  // lookup of a slot's partner.
-  const PAIRS = [[1, 2], [3, 4], [5, 6], [7, 8], [10, 11]];
+  // W/S or E/D keys on the left, or Y/H, U/J, I/K, O/L, P/; on the right) or side-by-side on
+  // the same row (the vowel pairs C/V and N/M) and so get fingered together as a unit rather
+  // than as two separate keys. Keyed both ways for O(1) lookup of a slot's partner. S- (the
+  // lone "A" key) and * (the lone "T" key) have no column partner on this keyboard and stay
+  // unpaired.
+  const PAIRS = [
+    [1, 2], [3, 4], [5, 6], // left: W/S, E/D, R/F
+    [7, 8], [10, 11], // vowels: C/V, N/M
+    [12, 13], [14, 15], [16, 17], [18, 19], [20, 21], // right: Y/H, U/J, I/K, O/L, P/;
+  ];
   const pairOf = new Map();
   PAIRS.forEach(([a, b], pair) => {
     pairOf.set(a, { pair, pos: 'a', with: b });
@@ -191,11 +197,15 @@
     return cols.length > 1 ? colIndex / (cols.length - 1) : 0;
   }
 
-  // 'a'/'b' if this key is the first/second half of a fingered-together pair (see PAIRS),
-  // '' otherwise. Lets the page nudge the pair's two keys a little closer together.
-  function keyPair(name) {
+  // 'a'/'b' if this key is the first/second half of a fingered-together pair (see PAIRS) AND
+  // its partner is also in `bits` - a single key with no partner in this stroke is never part
+  // of a pair, even if it has one on the keyboard - '' otherwise.
+  function keyPair(name, bits) {
     const index = slotIndex.get(name);
-    return index === undefined ? '' : pairOf.get(index)?.pos || '';
+    if (index === undefined) return '';
+    const p = pairOf.get(index);
+    if (!p || !(bits & (1 << p.with))) return '';
+    return p.pos;
   }
 
   return {
