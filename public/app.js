@@ -94,6 +94,7 @@
     retrying: false, // true while the current chord is held, so old errors stay hidden
     errorsVisible: false, // auto-hidden ERROR_VISIBLE_MS after a stroke ends, win or lose
     errorTimer: null,
+    lessonTransitionTimer: null,
     releaseTimers: new Map(), // event.code -> pending debounced-release timeout id
     drill: 0,
     typed: 0, // words finished this session
@@ -305,9 +306,12 @@
           const ch = document.createElement('span');
           const bit = 1 << state.slotIndex.get(name);
           const isHeld = (live & bit) !== 0;
-          const released = !isHeld && (madeThisStroke & bit) !== 0;
+          // Once a correct key has been pressed in this stroke it stays green for the rest of
+          // the stroke, held or not - only `released` (dimming) tracks whether it's still down.
+          const wasPressed = isHeld || (madeThisStroke & bit) !== 0;
+          const released = !isHeld && wasPressed;
           const group = S.keyGroup(name);
-          ch.className = `ch${group ? ` ${group}` : ''}${isHeld ? ' held' : ''}${released ? ' released' : ''}`;
+          ch.className = `ch${group ? ` ${group}` : ''}${wasPressed ? ' held' : ''}${released ? ' released' : ''}`;
           if (group) ch.style.setProperty('--shade', S.keyShade(name));
           ch.dataset.slot = String(state.slotIndex.get(name));
           ch.textContent = state.slotByName.get(name)?.sound || name;
@@ -667,11 +671,23 @@
         showUnlockToast(allKeys ? 'All Keys!' : `${S.displayName(name)} (${sound})`, allKeys);
       }
       nextLesson();
+      playLessonTransition();
     }
 
     startWord();
     saveProgress();
     refresh();
+  }
+
+  // A brief slide-down as a new lesson's words come in, so one lesson visibly ends and the
+  // next begins instead of the word stream just silently swapping its contents.
+  function playLessonTransition() {
+    const stream = $('stream');
+    stream.classList.remove('lesson-enter');
+    void stream.offsetWidth; // restart the animation even if one is still finishing
+    stream.classList.add('lesson-enter');
+    clearTimeout(state.lessonTransitionTimer);
+    state.lessonTransitionTimer = setTimeout(() => stream.classList.remove('lesson-enter'), 500);
   }
 
   // Drops the chord being typed and stops the word clock, so time away from the page is not counted
