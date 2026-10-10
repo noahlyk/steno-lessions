@@ -314,15 +314,9 @@ body.paused #practice .feedback {
 .ch.middle { color: color-mix(in srgb, var(--middle-ink) 100%, var(--shade-mix) calc(var(--shade, 0) * 85%)); }
 .ch.right { color: color-mix(in srgb, var(--right-ink) 100%, var(--shade-mix) calc(var(--shade, 0) * 85%)); }
 /* Keys fingered together as one unit (W/S, E/D, R/F; the vowel pairs C/V, N/M) share a colour.
-   A faint shared background chip ties the pair together visually without touching layout -
-   same gap, same padding, just a subtle rounded tint spanning both letters. */
-.ch.pair-a, .ch.pair-b {
-  background: color-mix(in srgb, currentColor 14%, transparent);
-  padding: 1px 3px;
-  margin: -1px 0;
-}
-.ch.pair-a { border-radius: 4px 0 0 4px; padding-right: 2px; }
-.ch.pair-b { border-radius: 0 4px 4px 0; padding-left: 2px; margin-left: -4px; }
+   A thin underline in that colour ties the pair together visually - an inset box-shadow, so it
+   doesn't add to the box and touch the surrounding gap/padding at all. */
+.ch.pair-a, .ch.pair-b { box-shadow: inset 0 -2px 0 0 currentColor; }
 /* Sounds keep their group colour while typed. A key held right turns its sound green. */
 .snd.current .ch.held { color: var(--good); }
 /* Wrong keys, inserted right into the sound sequence instead of floating off to the side */
