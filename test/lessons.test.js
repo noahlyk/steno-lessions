@@ -41,7 +41,7 @@ test('normalize keeps good fields and drops damaged ones', () => {
     words: [{ ms: 800, strokes: 2, misses: 0 }, { ms: 'x' }],
   });
   assert.equal(progress.unlocked, lessons.KEY_ORDER.length);
-  assert.deepEqual(progress.keys['A-'], { samples: 2, ewmaMs: 900, misses: 1, ewmaAcc: null });
+  assert.deepEqual(progress.keys['A-'], { samples: 2, ewmaMs: 900, misses: 1, recent: [] });
   assert.equal(progress.keys.NOPE, undefined);
   assert.deepEqual(progress.words, [{ ms: 800, strokes: 2, misses: 0 }]);
 });

@@ -36,6 +36,12 @@
   const MAX_WORD_LENGTH = 9;
   // Finished lessons' accuracy kept for the streak summary.
   const LESSON_HISTORY_LIMIT = 10;
+  // Attempts on one key kept for its rolling accuracy, so the unlock gate reflects recent
+  // play (about one lesson's worth) instead of a lifetime total that's nearly impossible to
+  // move once a key has thousands of samples.
+  const KEY_ACCURACY_WINDOW = 30;
+  // Attempts needed on a key before its rolling accuracy can gate an unlock.
+  const KEY_ACCURACY_MIN_SAMPLES = 5;
 
   // Words per minute needed to unlock the next key. It rises from 30 to 50 as keys are added.
   function wpmTarget(unlocked) {
@@ -74,7 +80,9 @@
           samples: Math.max(0, Number(stat.samples) || 0),
           ewmaMs: typeof stat.ewmaMs === 'number' ? stat.ewmaMs : null,
           misses: Math.max(0, Number(stat.misses) || 0),
-          ewmaAcc: typeof stat.ewmaAcc === 'number' ? Math.min(1, Math.max(0, stat.ewmaAcc)) : null,
+          recent: Array.isArray(stat.recent)
+            ? stat.recent.filter((hit) => hit === 0 || hit === 1).slice(-KEY_ACCURACY_WINDOW)
+            : [],
         };
       }
     }
@@ -102,14 +110,13 @@
   // A miss adds a penalty to the average rather than counting as a sample.
   function recordChord(progress, names, ms, correct) {
     for (const name of names) {
-      const stat = progress.keys[name] || { samples: 0, ewmaMs: null, misses: 0, ewmaAcc: null };
+      const stat = progress.keys[name] || { samples: 0, ewmaMs: null, misses: 0, recent: [] };
       const cost = correct ? ms : ms + MISS_PENALTY_MS;
       stat.ewmaMs = stat.ewmaMs === null ? cost : stat.ewmaMs * 0.7 + cost * 0.3;
-      // Recency-weighted, like ewmaMs, so a rough patch while still learning a key fades out
-      // instead of permanently capping it (keybr treats a key as "green" once it's currently
-      // good, not based on its all-time average).
-      const hit = correct ? 1 : 0;
-      stat.ewmaAcc = stat.ewmaAcc === null ? hit : stat.ewmaAcc * 0.85 + hit * 0.15;
+      // A plain rolling window (not an EWMA), so a single recent miss can't swing the gate by
+      // itself and a bad patch from thousands of attempts ago can't keep it stuck either -
+      // only the last KEY_ACCURACY_WINDOW attempts on this key count.
+      stat.recent = [...(stat.recent || []), correct ? 1 : 0].slice(-KEY_ACCURACY_WINDOW);
       if (correct) {
         stat.samples += 1;
       } else {
@@ -155,12 +162,14 @@
     return Math.round(stats.wpm * stats.accuracy * 20);
   }
 
-  // Recency-weighted share of attempts on one key that were right. 1 (not a gate) if the
-  // key has never been attempted, so it doesn't block unlocking before it's even practiced.
+  // Share of the last KEY_ACCURACY_WINDOW attempts on one key that were right. 1 (not a gate)
+  // if the key hasn't been attempted enough yet, so it doesn't block unlocking before there's
+  // enough recent data, and so it can't trap you on a bad patch forever - it clears as soon as
+  // enough recent attempts are good, no matter how many total attempts came before.
   function keyAccuracy(progress, name) {
     const stat = progress.keys[name];
-    if (!stat || stat.ewmaAcc === null) return 1;
-    return stat.ewmaAcc;
+    if (!stat || stat.recent.length < KEY_ACCURACY_MIN_SAMPLES) return 1;
+    return stat.recent.reduce((sum, hit) => sum + hit, 0) / stat.recent.length;
   }
 
   // Whether every unlocked key is individually accurate enough, not just the overall average.
