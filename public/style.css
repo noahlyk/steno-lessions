@@ -295,6 +295,7 @@ body.paused #practice .feedback {
   font-weight: 700;
   color: var(--ink);
   white-space: nowrap;
+  text-transform: uppercase;
 }
 .kc {
   grid-row: 4;
@@ -318,7 +319,7 @@ body.paused #practice .feedback {
    colour. A thin underline ties the pair together - an inset box-shadow, so it doesn't add to
    the box - and the usual 1px gap between letters is closed for just this one boundary so the
    underline reads as one continuous line instead of two short ones. */
-.ch.pair-a, .ch.pair-b { box-shadow: inset 0 -2px 0 0 currentColor; }
+.ch.pair-a, .ch.pair-b { box-shadow: inset 0 -5px 0 -3px currentColor; }
 .ch.pair-b { margin-left: -1px; }
 /* Sounds keep their group colour while typed. A key held right turns its sound green. */
 .snd.current .ch.held { color: var(--good); }
