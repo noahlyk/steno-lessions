@@ -234,7 +234,7 @@ body.paused #practice .feedback {
    and keys run as three parallel lines. The layout is the same with Key hints on or off. */
 .stream {
   position: relative;
-  height: 128px;
+  height: 184px;
   overflow: hidden;
   display: flex;
   flex-wrap: wrap;
