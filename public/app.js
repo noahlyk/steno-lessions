@@ -268,8 +268,10 @@
       preview.className = 'preview';
       if (isCurrent) {
         // A faint preview, above the word, of what letting go right now would actually
-        // resolve to - steno's own translation of the held chord, not just its sounds.
-        const held = heldBits();
+        // resolve to - steno's own translation of the chord, not just its sounds. Uses the
+        // whole stroke built up so far (state.chordBits), not just the keys still held, so
+        // letting go of one key early while mid-stroke doesn't drop it from the preview.
+        const held = state.chordBits;
         if (held) {
           const continues = state.candidates.some((seq) => seq[state.strokeIdx] === held);
           if (continues) {
@@ -293,12 +295,19 @@
         const sound = document.createElement('span');
         sound.className = `snd ${status}`;
         sound.style.gridColumn = column + 1;
-        const held = status === 'current' ? heldBits() : 0;
+        // `live` is keys held right now; `madeThisStroke` is every key pressed at any point
+        // since this stroke started, live or already let go. Letting go of one key early,
+        // mid-stroke, grays it out instead of dropping its colour entirely - the full chord
+        // built so far stays visible until the whole stroke ends.
+        const live = status === 'current' ? heldBits() : 0;
+        const madeThisStroke = status === 'current' ? state.chordBits : 0;
         for (const name of S.namesInBits(bits)) {
           const ch = document.createElement('span');
-          const isHeld = (held & (1 << state.slotIndex.get(name))) !== 0;
+          const bit = 1 << state.slotIndex.get(name);
+          const isHeld = (live & bit) !== 0;
+          const released = !isHeld && (madeThisStroke & bit) !== 0;
           const group = S.keyGroup(name);
-          ch.className = `ch${group ? ` ${group}` : ''}${isHeld ? ' held' : ''}`;
+          ch.className = `ch${group ? ` ${group}` : ''}${isHeld ? ' held' : ''}${released ? ' released' : ''}`;
           if (group) ch.style.setProperty('--shade', S.keyShade(name));
           ch.dataset.slot = String(state.slotIndex.get(name));
           ch.textContent = state.slotByName.get(name)?.sound || name;
@@ -309,19 +318,25 @@
           // naturally fall in (left to right, same order as the correct sounds), instead of
           // being appended after it. They disappear the instant a fresh chord begins (the
           // keydown handler clears state.failures then), so an error never lingers into the
-          // next attempt - it looks exactly like a clean first try.
+          // next attempt - it looks exactly like a clean first try. Wrong keys already let go
+          // of mid-stroke stay inserted too, just grayed, same as correct ones.
           const soundOf = (name) => state.slotByName.get(name)?.sound || name;
-          const wrongNames = S.namesInBits(held & ~bits);
+          const liveWrongNames = new Set(S.namesInBits(live & ~bits));
+          const wrongNames = S.namesInBits(madeThisStroke & ~bits);
           const failedNames = state.retrying || !state.errorsVisible
             ? []
             : state.failures.flatMap((chord) => S.namesInBits(chord));
-          const insertions = [...failedNames, ...wrongNames].map((name) => ({
-            at: state.slotIndex.get(name),
-            text: soundOf(name),
-          }));
-          for (const { at, text } of insertions) {
+          const insertions = [
+            ...failedNames.map((name) => ({ at: state.slotIndex.get(name), text: soundOf(name), released: false })),
+            ...wrongNames.map((name) => ({
+              at: state.slotIndex.get(name),
+              text: soundOf(name),
+              released: !liveWrongNames.has(name),
+            })),
+          ];
+          for (const { at, text, released } of insertions) {
             const ch = document.createElement('span');
-            ch.className = 'ch wrong';
+            ch.className = `ch wrong${released ? ' released' : ''}`;
             ch.textContent = text;
             // Find the correct-sound span already in this slot's position, if any, and insert
             // right after it, so wrong keys land among the sounds in the same left-to-right

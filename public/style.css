@@ -313,6 +313,9 @@ body.paused #practice .feedback {
   color: var(--bad);
   margin-left: 2px;
 }
+/* A key let go mid-stroke, before the whole chord is released: stays green/red but dims,
+   instead of vanishing, so the chord built up so far is still readable at a glance. */
+.ch.released { opacity: 0.45; }
 .snd.done, .kc.done { opacity: 0.45; }
 
 /* A faint preview, above the word, of what letting go right now would resolve to - its own
