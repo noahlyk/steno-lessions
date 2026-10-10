@@ -171,32 +171,6 @@
     pairOf.set(b, { pair, pos: 'b', with: a });
   });
 
-  // Splits a group's slot-index range into columns, merging each fingered-together pair into
-  // one column so they always land in the same column (and so get the same shade).
-  function columnsOf(start, end) {
-    const cols = [];
-    for (let i = start; i < end; i++) {
-      const p = pairOf.get(i);
-      if (p && p.pos === 'b') continue; // already folded into its partner's column
-      cols.push(p && p.pos === 'a' ? [i, p.with] : [i]);
-    }
-    return cols;
-  }
-
-  // Where a key sits within its own group (left/middle/right), as a fraction from 0 (first
-  // column in the group) to 1 (last). Slot order follows the physical key columns, so two keys
-  // close in this fraction are easy mistakes to make with one finger - shading by it lets the
-  // page tint each key in a group slightly differently without leaving the group's colour.
-  // Keys fingered together as a pair share one column, so they always get the same shade.
-  function keyShade(name) {
-    const index = slotIndex.get(name);
-    if (index === undefined || index === NUMBER_SLOT) return 0;
-    const [start, end] = index < LEFT_END ? [0, LEFT_END] : index < 12 ? [LEFT_END, 12] : [12, NUMBER_SLOT];
-    const cols = columnsOf(start, end);
-    const colIndex = cols.findIndex((col) => col.includes(index));
-    return cols.length > 1 ? colIndex / (cols.length - 1) : 0;
-  }
-
   // 'a'/'b' if this key is the first/second half of a fingered-together pair (see PAIRS) AND
   // its partner is also in `bits` - a single key with no partner in this stroke is never part
   // of a pair, even if it has one on the keyboard - '' otherwise.
@@ -210,6 +184,6 @@
 
   return {
     SLOTS, parseStroke, parseLayout, namesInBits, buildWords, popcount, renderStroke, displayName,
-    keyGroup, keyShade, keyPair,
+    keyGroup, keyPair,
   };
 });

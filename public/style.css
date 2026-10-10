@@ -19,7 +19,6 @@
   --down: #f2b84b;
   --good: #2e8b57;
   --bad: #c0392b;
-  --shade-mix: black;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -43,7 +42,6 @@
     --down: #d9a03a;
     --good: #5fbf85;
     --bad: #e07165;
-    --shade-mix: white;
   }
 }
 
@@ -67,7 +65,6 @@
   --down: #d9a03a;
   --good: #5fbf85;
   --bad: #e07165;
-  --shade-mix: white;
 }
 
 * { box-sizing: border-box; }
@@ -307,13 +304,12 @@ body.paused #practice .feedback {
 /* Each stroke of a word is a group. A divider line and extra space between groups show where
    one chord ends and the next begins */
 .snd + .snd, .kc + .kc { border-left: 2px solid var(--divider); }
-/* Left-hand keys, vowels and right-hand keys each have their own colour in the stream.
-   --shade (0 = first key in the group, 1 = last) tints each key's own colour a bit lighter
-   or darker, so two keys in the same group - easy to blur together with one finger - still
-   read as different without leaving the group's hue. */
-.ch.left { color: color-mix(in srgb, var(--left-ink) 100%, var(--shade-mix) calc(var(--shade, 0) * 85%)); }
-.ch.middle { color: color-mix(in srgb, var(--middle-ink) 100%, var(--shade-mix) calc(var(--shade, 0) * 85%)); }
-.ch.right { color: color-mix(in srgb, var(--right-ink) 100%, var(--shade-mix) calc(var(--shade, 0) * 85%)); }
+/* Left-hand keys, vowels and right-hand keys each have their own flat colour in the stream.
+   Keys fingered together as a pair share that one colour too - the underline below is what
+   tells them apart from their neighbours, not a shade difference. */
+.ch.left { color: var(--left-ink); }
+.ch.middle { color: var(--middle-ink); }
+.ch.right { color: var(--right-ink); }
 /* Keys fingered together as one unit, only when both halves actually appear in this stroke
    (W/S, E/D, R/F, Y/H, U/J, I/K, O/L, P/; on their columns; the vowel pairs C/V, N/M) share a
    colour. A thin underline ties the pair together - an inset box-shadow, so it doesn't add to
