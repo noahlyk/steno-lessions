@@ -90,10 +90,8 @@
     wordMisses: 0,
     wordMs: 0,
     lastChordEnd: null,
-    failures: [],
-    retrying: false, // true while the current chord is held, so old errors stay hidden
-    errorsVisible: false, // auto-hidden ERROR_VISIBLE_MS after a stroke ends, win or lose
-    errorTimer: null,
+    failures: [], // wrong attempts still being drilled - tracked for retry/undo, not displayed
+    previewBits: 0, // the last stroke's chord, kept after release so the preview survives it
     lessonTransitionTimer: null,
     releaseTimers: new Map(), // event.code -> pending debounced-release timeout id
     drill: 0,
@@ -237,9 +235,7 @@
     state.wordMs = 0;
     state.lastChordEnd = null;
     state.failures = [];
-    state.retrying = false;
-    clearTimeout(state.errorTimer);
-    state.errorsVisible = false;
+    state.previewBits = 0;
     state.drill = 0;
   }
 
@@ -269,10 +265,13 @@
       preview.className = 'preview';
       if (isCurrent) {
         // A faint preview, above the word, of what letting go right now would actually
-        // resolve to - steno's own translation of the chord, not just its sounds. Uses the
-        // whole stroke built up so far (state.chordBits), not just the keys still held, so
-        // letting go of one key early while mid-stroke doesn't drop it from the preview.
-        const held = state.chordBits;
+        // resolve to - steno's own translation of the chord, not just its sounds. While a
+        // stroke is being held, it tracks the whole chord built up so far (state.chordBits),
+        // not just the keys still held, so letting go of one key early mid-stroke doesn't drop
+        // it. Once the whole stroke is let go, every other visual resets instantly - but the
+        // preview keeps showing that stroke's resolution (state.previewBits) until the next
+        // one starts replacing it, live, key by key.
+        const held = state.pressed.size > 0 ? state.chordBits : state.previewBits;
         if (held) {
           const continues = state.candidates.some((seq) => seq[state.strokeIdx] === held);
           if (continues) {
@@ -320,24 +319,17 @@
         if (status === 'current') {
           // Wrong keys are inserted into the sound sequence at the slot position they'd
           // naturally fall in (left to right, same order as the correct sounds), instead of
-          // being appended after it. They disappear the instant a fresh chord begins (the
-          // keydown handler clears state.failures then), so an error never lingers into the
-          // next attempt - it looks exactly like a clean first try. Wrong keys already let go
-          // of mid-stroke stay inserted too, just grayed, same as correct ones.
+          // being appended after it. The instant the whole chord is let go, finishChord zeroes
+          // state.chordBits, so this - like the green/red key colours above - clears completely
+          // and does not linger into the next attempt or the gap before it.
           const soundOf = (name) => state.slotByName.get(name)?.sound || name;
           const liveWrongNames = new Set(S.namesInBits(live & ~bits));
           const wrongNames = S.namesInBits(madeThisStroke & ~bits);
-          const failedNames = state.retrying || !state.errorsVisible
-            ? []
-            : state.failures.flatMap((chord) => S.namesInBits(chord));
-          const insertions = [
-            ...failedNames.map((name) => ({ at: state.slotIndex.get(name), text: soundOf(name), released: false })),
-            ...wrongNames.map((name) => ({
-              at: state.slotIndex.get(name),
-              text: soundOf(name),
-              released: !liveWrongNames.has(name),
-            })),
-          ];
+          const insertions = wrongNames.map((name) => ({
+            at: state.slotIndex.get(name),
+            text: soundOf(name),
+            released: !liveWrongNames.has(name),
+          }));
           for (const { at, text, released } of insertions) {
             const ch = document.createElement('span');
             ch.className = `ch wrong${released ? ' released' : ''}`;
@@ -543,25 +535,18 @@
   const IDLE_MS = 3000;
   // After a mistake, the stroke must be typed right this many times in a row to go on
   const DRILL_REPEATS = 1;
-  // How long a mistake stays visible after the stroke that made it ends, win or lose - past
-  // this, it just makes the line harder to read, so it fades even if you haven't retried yet.
-  const ERROR_VISIBLE_MS = 200;
-
-  function armErrorTimer() {
-    clearTimeout(state.errorTimer);
-    state.errorsVisible = true;
-    state.errorTimer = setTimeout(() => {
-      state.errorsVisible = false;
-      refresh();
-    }, ERROR_VISIBLE_MS);
-  }
   // The * stroke, which is undo in Plover (the T key on this layout)
   const UNDO = S.parseStroke('*');
 
   function finishChord() {
     if (!currentWord()) return;
-    state.retrying = false;
     const chord = state.chordBits;
+    // The whole chord has just been let go. Every visual tied to holding it - the green/red
+    // key colours, any wrong-key insert - resets instantly here, with nothing left lingering
+    // until the next stroke. The preview is the one exception: it keeps showing what this
+    // stroke resolved to (state.previewBits), so letting go doesn't blank it.
+    state.previewBits = chord;
+    state.chordBits = 0;
     const now = performance.now();
     const ms = now - state.chordStart;
     // Word time is active typing only: the hold, plus the pause before it if the pause was
@@ -605,7 +590,6 @@
       // there, so there is never more than one live mistake to track at once.
       state.failures = [chord];
       state.drill = DRILL_REPEATS;
-      armErrorTimer();
       setFeedback(
         `Needs ${S.renderStroke(target)} (${namesOf(target)}). You pressed ${namesOf(chord)}. ` +
           `Type it ${state.drill} more times in a row to go on, or press * (T key) to undo.`,
@@ -695,7 +679,6 @@
     state.pressed.clear();
     state.chordBits = 0;
     state.lastChordEnd = null;
-    state.retrying = false;
     for (const timer of state.releaseTimers.values()) clearTimeout(timer);
     state.releaseTimers.clear();
     renderChord();
@@ -748,13 +731,12 @@
     if (!info) return;
     event.preventDefault();
     if (state.pressed.size === 0) {
+      // A fresh stroke starts clean: finishChord already zeroed state.chordBits and cleared
+      // every error visual the instant the last one was let go, so there is nothing left over
+      // here to hide. The failures state (and the drill count) are untouched, so undo (*)
+      // still works and a wrong stroke still needs a correct retry.
       state.chordBits = 0;
       state.chordStart = performance.now();
-      // A fresh stroke starts clean: any error display left over from the last attempt is
-      // hidden the instant the next one begins, as if it never happened. The failures
-      // themselves (and the drill count) are untouched, so undo (*) still works and a wrong
-      // stroke still needs a correct retry - only the leftover red text is hidden.
-      state.retrying = true;
     }
     state.pressed.add(event.code);
     state.chordBits |= info.bits;
