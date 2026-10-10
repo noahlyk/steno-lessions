@@ -94,6 +94,7 @@
     retrying: false, // true while the current chord is held, so old errors stay hidden
     errorsVisible: false, // auto-hidden ERROR_VISIBLE_MS after a stroke ends, win or lose
     errorTimer: null,
+    releaseTimers: new Map(), // event.code -> pending debounced-release timeout id
     drill: 0,
     typed: 0, // words finished this session
     pressed: new Set(),
@@ -620,6 +621,8 @@
     state.chordBits = 0;
     state.lastChordEnd = null;
     state.retrying = false;
+    for (const timer of state.releaseTimers.values()) clearTimeout(timer);
+    state.releaseTimers.clear();
     renderChord();
   }
 
@@ -641,6 +644,13 @@
     $('pause-overlay').classList.add('hidden');
   }
 
+  // Some setups (X11 without "detectable autorepeat", seen on this session's own OS) send a
+  // held key as real repeated keyup/keydown pairs instead of one keydown with event.repeat -
+  // so holding one key could otherwise look like typing the same stroke a dozen times. A
+  // keyup is held for this long before it's believed; a keydown for the same code arriving
+  // first cancels it, so the hold reads as one continuous press until the key truly comes up.
+  const RELEASE_DEBOUNCE_MS = 25;
+
   // Keys are only taken over when they are steno keys. Everything else, and anything with
   // Ctrl, Alt or Meta held, passes through to the browser and the system untouched.
   document.addEventListener('keydown', (event) => {
@@ -648,6 +658,14 @@
     if (event.code === 'Space') event.preventDefault();
     if (state.paused) {
       resume();
+      return;
+    }
+    const pendingRelease = state.releaseTimers.get(event.code);
+    if (pendingRelease !== undefined) {
+      // The OS repeating the key, not a new press - the key never really came up.
+      clearTimeout(pendingRelease);
+      state.releaseTimers.delete(event.code);
+      event.preventDefault();
       return;
     }
     if (event.repeat || event.ctrlKey || event.altKey || event.metaKey) return;
@@ -669,9 +687,14 @@
   });
 
   document.addEventListener('keyup', (event) => {
-    if (!state.pressed.delete(event.code)) return;
-    if (state.pressed.size === 0) finishChord();
-    renderChord();
+    if (!state.pressed.has(event.code)) return;
+    const timer = setTimeout(() => {
+      state.releaseTimers.delete(event.code);
+      state.pressed.delete(event.code);
+      if (state.pressed.size === 0) finishChord();
+      renderChord();
+    }, RELEASE_DEBOUNCE_MS);
+    state.releaseTimers.set(event.code, timer);
   });
 
   window.addEventListener('blur', () => { clearChord(); pause(); });
