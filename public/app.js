@@ -143,6 +143,30 @@
     }
   }
 
+  // The practice word list is filtered down to plain, typeable words, so on its own the
+  // resolver only knows a fraction of real steno strokes. This fills in the rest from the
+  // full raw dictionary (every stroke Plover defines, including names, numbers, punctuation
+  // and briefs) so the letting-go preview resolves accurately for any stroke, not just the
+  // ones the lessons use. It's additive only - entries already set by the curated word list
+  // win, and loading happens in the background, after the practice words are ready, since a
+  // slightly delayed preview for an obscure stroke is fine, but the practice words must not
+  // wait on a 4MB dictionary fetch.
+  async function loadFullResolver() {
+    let dict;
+    try {
+      dict = await getJson('data/dictionary.json');
+    } catch {
+      return;
+    }
+    for (const notation in dict) {
+      if (notation.includes('/')) continue;
+      const bits = S.parseStroke(notation);
+      if (bits === null || state.strokeWord.has(bits)) continue;
+      state.strokeWord.set(bits, dict[notation]);
+    }
+    refresh();
+  }
+
   // The physical keys to press for a stroke, using combined keys where they fit, so the
   // hint reads like the chord on the keyboard (e.g. "V" for A- and O-).
   function keysFor(bits) {
@@ -792,6 +816,7 @@
     }
     buildIndexes(state.data.layout);
     buildStrokeIndex(state.data.words);
+    loadFullResolver();
     buildKeyboard();
     applyHints();
     $("hints").addEventListener("change", (event) => {
