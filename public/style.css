@@ -310,9 +310,13 @@ body.paused #practice .feedback {
    --shade (0 = first key in the group, 1 = last) tints each key's own colour a bit lighter
    or darker, so two keys in the same group - easy to blur together with one finger - still
    read as different without leaving the group's hue. */
-.ch.left { color: color-mix(in srgb, var(--left-ink) 100%, var(--shade-mix) calc(var(--shade, 0) * 60%)); }
-.ch.middle { color: color-mix(in srgb, var(--middle-ink) 100%, var(--shade-mix) calc(var(--shade, 0) * 60%)); }
-.ch.right { color: color-mix(in srgb, var(--right-ink) 100%, var(--shade-mix) calc(var(--shade, 0) * 60%)); }
+.ch.left { color: color-mix(in srgb, var(--left-ink) 100%, var(--shade-mix) calc(var(--shade, 0) * 85%)); }
+.ch.middle { color: color-mix(in srgb, var(--middle-ink) 100%, var(--shade-mix) calc(var(--shade, 0) * 85%)); }
+.ch.right { color: color-mix(in srgb, var(--right-ink) 100%, var(--shade-mix) calc(var(--shade, 0) * 85%)); }
+/* Keys fingered together as one unit (W/S, E/D, R/F; the vowel pairs C/V, N/M) already share
+   a colour - nudge them half the usual gap closer so they read as one unit, not two. */
+.ch.pair-a { margin-right: -0.5px; }
+.ch.pair-b { margin-left: -0.5px; }
 /* Sounds keep their group colour while typed. A key held right turns its sound green. */
 .snd.current .ch.held { color: var(--good); }
 /* Wrong keys, inserted right into the sound sequence instead of floating off to the side */

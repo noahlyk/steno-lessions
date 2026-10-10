@@ -334,7 +334,8 @@
           const wasPressed = isHeld || (madeThisStroke & bit) !== 0;
           const released = !isHeld && wasPressed;
           const group = S.keyGroup(name);
-          ch.className = `ch${group ? ` ${group}` : ''}${wasPressed ? ' held' : ''}${released ? ' released' : ''}`;
+          const pair = S.keyPair(name);
+          ch.className = `ch${group ? ` ${group}` : ''}${wasPressed ? ' held' : ''}${released ? ' released' : ''}${pair ? ` pair-${pair}` : ''}`;
           if (group) ch.style.setProperty('--shade', S.keyShade(name));
           ch.dataset.slot = String(state.slotIndex.get(name));
           ch.textContent = state.slotByName.get(name)?.sound || name;
