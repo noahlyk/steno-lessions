@@ -664,3 +664,43 @@ kbd {
   border-color: var(--bad);
   color: var(--bad);
 }
+
+/* A brief, non-blocking achievement toast for unlocking a new key - kept understated: a
+   small card that rises in and fades back out on its own, never asks for input. */
+.unlock-toast {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translate(-50%, -14px);
+  z-index: 60;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.unlock-toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.unlock-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: var(--card);
+  border: 1px solid var(--target);
+  border-radius: 10px;
+  padding: 8px 18px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+.unlock-label {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.unlock-name {
+  font: 700 18px ui-monospace, Menlo, monospace;
+  color: var(--target);
+}
+.unlock-toast.all-keys .unlock-card { border-color: var(--down); }
+.unlock-toast.all-keys .unlock-name { color: var(--down); }

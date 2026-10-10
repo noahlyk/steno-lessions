@@ -567,6 +567,21 @@
     }
   }
 
+  let unlockToastTimer = null;
+  function showUnlockToast(text, allKeys) {
+    const toast = $('unlock-toast');
+    clearTimeout(unlockToastTimer);
+    $('unlock-label').textContent = allKeys ? 'All keys unlocked' : 'Key unlocked';
+    $('unlock-name').textContent = text;
+    toast.classList.toggle('all-keys', Boolean(allKeys));
+    // Force a reflow so re-triggering the toast on back-to-back unlocks restarts the
+    // transition instead of being a no-op (the class would already be set).
+    toast.classList.remove('show');
+    void toast.offsetWidth;
+    toast.classList.add('show');
+    unlockToastTimer = setTimeout(() => toast.classList.remove('show'), allKeys ? 3200 : 2000);
+  }
+
   function wordDone() {
     L.recordWord(state.progress, { ms: state.wordMs, strokes: state.strokeIdx, misses: state.wordMisses });
     state.typed += 1;
@@ -580,10 +595,12 @@
       if (L.unlockIfReady(state.progress)) {
         const name = L.KEY_ORDER[state.progress.unlocked - 1];
         const sound = state.slotByName.get(name)?.sound || '';
+        const allKeys = state.progress.unlocked >= L.KEY_ORDER.length;
         setFeedback(
           `Unlocked ${S.displayName(name)} (${sound}). Next: ${L.wpmTarget(state.progress.unlocked)} wpm.`,
           'good',
         );
+        showUnlockToast(allKeys ? 'All Keys!' : `${S.displayName(name)} (${sound})`, allKeys);
       }
       nextLesson();
     }
