@@ -11,9 +11,9 @@
   --locked: #d6d5ce;
   --locked-ink: #55544e;
   --divider: #b9b8b0;
-  --left-ink: #c25e12;
-  --middle-ink: #2f7fd1;
-  --right-ink: #7a4fb0;
+  --left-ink: #d9550a;
+  --middle-ink: #1f74e0;
+  --right-ink: #8b3fc9;
   --target: #2f7fd1;
   --target-ink: #ffffff;
   --down: #f2b84b;
@@ -36,9 +36,9 @@
     --locked: #3a3a35;
     --locked-ink: #c4c3ba;
     --divider: #77766d;
-    --left-ink: #f0a04b;
-    --middle-ink: #5aa8f0;
-    --right-ink: #b9a3e6;
+    --left-ink: #ffac4d;
+    --middle-ink: #5bb0ff;
+    --right-ink: #c78bff;
     --target: #3b8ee0;
     --down: #d9a03a;
     --good: #5fbf85;
@@ -60,9 +60,9 @@
   --locked: #3a3a35;
   --locked-ink: #c4c3ba;
   --divider: #77766d;
-  --left-ink: #f0a04b;
-  --middle-ink: #5aa8f0;
-  --right-ink: #b9a3e6;
+  --left-ink: #ffac4d;
+  --middle-ink: #5bb0ff;
+  --right-ink: #c78bff;
   --target: #3b8ee0;
   --down: #d9a03a;
   --good: #5fbf85;
@@ -313,10 +313,16 @@ body.paused #practice .feedback {
 .ch.left { color: color-mix(in srgb, var(--left-ink) 100%, var(--shade-mix) calc(var(--shade, 0) * 85%)); }
 .ch.middle { color: color-mix(in srgb, var(--middle-ink) 100%, var(--shade-mix) calc(var(--shade, 0) * 85%)); }
 .ch.right { color: color-mix(in srgb, var(--right-ink) 100%, var(--shade-mix) calc(var(--shade, 0) * 85%)); }
-/* Keys fingered together as one unit (W/S, E/D, R/F; the vowel pairs C/V, N/M) already share
-   a colour - nudge them half the usual gap closer so they read as one unit, not two. */
-.ch.pair-a { margin-right: -0.5px; }
-.ch.pair-b { margin-left: -0.5px; }
+/* Keys fingered together as one unit (W/S, E/D, R/F; the vowel pairs C/V, N/M) share a colour.
+   A faint shared background chip ties the pair together visually without touching layout -
+   same gap, same padding, just a subtle rounded tint spanning both letters. */
+.ch.pair-a, .ch.pair-b {
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  padding: 1px 3px;
+  margin: -1px 0;
+}
+.ch.pair-a { border-radius: 4px 0 0 4px; padding-right: 2px; }
+.ch.pair-b { border-radius: 0 4px 4px 0; padding-left: 2px; margin-left: -4px; }
 /* Sounds keep their group colour while typed. A key held right turns its sound green. */
 .snd.current .ch.held { color: var(--good); }
 /* Wrong keys, inserted right into the sound sequence instead of floating off to the side */
