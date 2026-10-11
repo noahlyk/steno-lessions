@@ -633,9 +633,23 @@
     });
     const unlockedNames = L.unlockedNames(progress);
     const masteredCount = unlockedNames.filter((name) => L.masteryTier(progress, name) >= 2).length;
+    const allMastered = unlockedNames.length > 0 && masteredCount === unlockedNames.length;
+    // The scaffold-off badges below reuse `scaffolds` as-is (the checkbox state already
+    // travels with progress) rather than re-deriving anything: once every key is mastered,
+    // scaffoldTier is already past every stage's fade threshold, so an unchecked box here
+    // *is* the scaffold actually gone, not just opted out of.
+    const scaffolds = progress.scaffolds;
     const badges = [
       { cls: 'silver', label: 'Half your sounds mastered', earned: masteredCount >= Math.ceil(unlockedNames.length / 2) },
-      { cls: 'gold', label: 'Every sound mastered', earned: unlockedNames.length > 0 && masteredCount === unlockedNames.length },
+      { cls: 'gold', label: 'Every sound mastered', earned: allMastered },
+      { cls: 'platinum', label: 'Every sound mastered with stroke labels off', earned: allMastered && !scaffolds.labels },
+      { cls: 'diamond', label: 'Every sound mastered with the target highlight off', earned: allMastered && !scaffolds.target },
+      { cls: 'obsidian', label: 'Every sound mastered with the keyboard diagram off', earned: allMastered && !scaffolds.keyboard },
+      {
+        cls: 'ultimate',
+        label: 'Every sound mastered with every scaffold off',
+        earned: allMastered && !scaffolds.labels && !scaffolds.target && !scaffolds.keyboard,
+      },
     ];
     for (const badge of badges) {
       const chip = document.createElement('li');

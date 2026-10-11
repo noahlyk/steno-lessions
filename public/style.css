@@ -179,6 +179,33 @@ body {
   border-color: #c98a1a;
   box-shadow: 0 0 6px rgba(232, 169, 58, 0.6);
 }
+/* Prestige badges: every sound mastered all over again with one scaffold (or all three)
+   actually gone, not just dimmed - least consequential scaffold removed first, same order
+   as SCAFFOLD_BOXES, ending in the hardest, keyboard-diagram-off run and the all-three combo. */
+.key-chips li.vanity.platinum.earned {
+  background: linear-gradient(135deg, #e6e9f0, #b7bfcf);
+  color: #22242c;
+  border-color: #8d96ab;
+  box-shadow: 0 0 6px rgba(141, 150, 171, 0.6);
+}
+.key-chips li.vanity.diamond.earned {
+  background: linear-gradient(135deg, #bdf1ff, #6cc8e8);
+  color: #0a2b33;
+  border-color: #3aa6c9;
+  box-shadow: 0 0 6px rgba(58, 166, 201, 0.6);
+}
+.key-chips li.vanity.obsidian.earned {
+  background: linear-gradient(135deg, #3a3240, #15121a);
+  color: #d9c9ff;
+  border-color: #9a7fe0;
+  box-shadow: 0 0 6px rgba(154, 127, 224, 0.6);
+}
+.key-chips li.vanity.ultimate.earned {
+  background: linear-gradient(135deg, #ff9a6c, #ff5fa2, #7f5fff);
+  color: #2a0a1a;
+  border-color: #ff5fa2;
+  box-shadow: 0 0 8px rgba(255, 95, 162, 0.7);
+}
 
 .key-chips li { cursor: default; outline-offset: 2px; }
 
