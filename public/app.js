@@ -82,18 +82,9 @@
     $("hints").checked = state.hints;
   }
 
-  // Which keyboard diagram the page shows: the QWERTY board (how the lessons were played
-  // before there was a machine) or the Uni v4, drawn in its real split-ortholinear shape.
-  // Diagram choice only - typing works on either, QWERTY keys always and the machine once
-  // it is connected. Saved in this browser.
-  const KBD_KEY = "steno-lessions.kbd";
-  function readKbd() {
-    try {
-      return localStorage.getItem(KBD_KEY) === "uni" ? "uni" : "qwerty";
-    } catch {
-      return "qwerty";
-    }
-  }
+  // Which keyboard diagram the page shows: the QWERTY board or the Uni v4, drawn in its real
+  // split-ortholinear shape. There is no setting for it: it follows the input. A stroke that
+  // starts on a QWERTY key shows QWERTY, one that starts on the machine shows the Uni v4.
 
   // Which steno theory the lessons use. Each one has its own folder of data: Plover's sits at
   // data/, Lapwing's under data/lapwing/ (built by scripts/build-theory.js). Saved in this
@@ -204,7 +195,7 @@
     // first word(s) of the next stretch get the slow entrance animation instead of just appearing
     breakTimer: null,
     releaseTimers: new Map(), // event.code -> pending debounced-release timeout id
-    kbd: readKbd(), // which keyboard diagram is shown: 'qwerty' or 'uni'
+    kbd: 'qwerty', // which keyboard diagram is shown: 'qwerty' or 'uni', following the last input
     uniKeyEls: new Map(), // Uni diagram key element -> the lever name it stands for
     uniPressed: new Set(), // Uni v4 lever names held right now (machine input, see Task 3)
     typed: 0, // words finished this session
@@ -1335,6 +1326,7 @@
       // still works and a wrong stroke still needs a correct retry.
       state.chordBits = 0;
       state.chordStart = performance.now();
+      setKbd('qwerty');
     }
     state.pressed.add(event.code);
     state.chordBits |= info.bits;
@@ -1362,31 +1354,69 @@
   // accumulation. Plover itself keeps reading the same device - on Linux, hidraw hands a
   // copy of every report to each reader - so the machine can stay connected to both.
   let uniDevice = null;
-  function setUniStatus(text) { $('uni-status').textContent = text; }
+  function setUniStatus(text) {
+    const status = $('uni-status');
+    status.textContent = text;
+    status.classList.toggle('live', text === 'connected');
+  }
+  // Connected: the button has nothing left to do, so it gives way to the status.
+  function showUniConnected(connected) {
+    $('connect-uni').hidden = connected;
+    setUniStatus(connected ? 'connected' : '');
+  }
 
-  async function connectUni() {
-    if (!navigator.hid) {
-      setFeedback('The Uni v4 needs a Chromium browser (Chrome, Edge, Chromium) for WebHID.', 'bad');
-      return;
-    }
-    // Already connected: reopening the picker would only invite a second open() rejection
-    // or a second listener on the same device.
+  // The diagram follows the input, so it only ever changes at the first key of a stroke (a
+  // chord that mixes both sources keeps the board it started on).
+  function setKbd(kind) {
+    if (state.kbd === kind) return;
+    state.kbd = kind;
+    refresh();
+  }
+
+  const isPloverHid = (device) => device.collections.some((c) => c.usagePage === U.USAGE_PAGE && c.usage === U.USAGE);
+
+  // Opens a granted device and starts reading its reports. Shared by the Connect button and
+  // by the silent reconnect of a device the browser already has permission for.
+  async function attachUni(device) {
+    // Already connected: reopening would only invite a second open() rejection or a second
+    // listener on the same device.
     if (uniDevice) return;
+    if (!device.opened) await device.open();
+    uniDevice = device;
+    device.addEventListener('inputreport', onUniReport);
+    device.addEventListener('disconnect', onUniDisconnect);
+    showUniConnected(true);
+    setKbd('uni');
+  }
+
+  // Chromium only opens its device chooser from a click or keypress, so a first connection
+  // can't be prompted on page load - that is what the button is for. Once a device has been
+  // granted, though, getDevices() hands it back with no prompt, and so does plugging it in.
+  async function connectUni() {
+    if (!navigator.hid || uniDevice) return;
     const button = $('connect-uni');
     button.disabled = true;
     try {
       const [device] = await navigator.hid.requestDevice({ filters: [{ usagePage: U.USAGE_PAGE, usage: U.USAGE }] });
-      if (!device) { setFeedback('No Uni selected.', 'bad'); return; }
-      await device.open();
-      uniDevice = device;
-      device.addEventListener('inputreport', onUniReport);
-      device.addEventListener('disconnect', onUniDisconnect);
-      setUniStatus('connected');
-      setFeedback('Uni v4 connected. Its keys type here; QWERTY still works too.', 'good');
+      if (!device) { setFeedback('No keyboard selected.', 'bad'); return; }
+      await attachUni(device);
+      setFeedback('Plover HID keyboard connected. Its keys type here; QWERTY still works too.', 'good');
     } catch (error) {
-      setFeedback(`Could not connect the Uni v4: ${error.message}`, 'bad');
+      setFeedback(`Could not connect the keyboard: ${error.message}`, 'bad');
     } finally {
       button.disabled = false;
+    }
+  }
+
+  async function reconnectUni() {
+    try {
+      const device = (await navigator.hid.getDevices()).find(isPloverHid);
+      if (device) {
+        await attachUni(device);
+        setFeedback('Plover HID keyboard reconnected.', 'good');
+      }
+    } catch {
+      // Another app has the device open, or it was unplugged mid-open: the button still works
     }
   }
 
@@ -1408,6 +1438,7 @@
       if (state.pressed.size === 0 && state.uniPressed.size === 0) {
         state.chordBits = 0;
         state.chordStart = performance.now();
+        setKbd('uni');
       }
       for (const name of levers) state.uniPressed.add(name);
       state.chordBits |= U.strokeBits(levers);
@@ -1429,19 +1460,33 @@
     // longer on the desk. Any QWERTY keys still held keep building their chord.
     state.chordBits &= ~U.strokeBits([...state.uniPressed]);
     state.uniPressed.clear();
-    setUniStatus('');
-    setFeedback('Uni v4 disconnected. QWERTY typing still works.', 'bad');
+    showUniConnected(false);
+    setKbd('qwerty');
+    setFeedback('Plover HID keyboard disconnected. QWERTY typing still works.', 'bad');
     renderChord();
   }
 
+  const UNI_WARNING_KEY = 'steno-lessions.uni-warning-dismissed';
   function setupUni() {
     const button = $('connect-uni');
     if (!navigator.hid) {
-      button.disabled = true;
-      setUniStatus('Needs a Chromium browser');
+      // Firefox and Safari have no WebHID, so there is no way to see a Plover HID keyboard
+      // from here: say so up front, to anyone who has one, instead of a dead button.
+      button.hidden = true;
+      let dismissed = false;
+      try { dismissed = localStorage.getItem(UNI_WARNING_KEY) === '1'; } catch { /* shown again next visit */ }
+      $('uni-warning').hidden = dismissed;
+      $('uni-warning-dismiss').addEventListener('click', () => {
+        $('uni-warning').hidden = true;
+        try { localStorage.setItem(UNI_WARNING_KEY, '1'); } catch { /* shown again next visit */ }
+      });
       return;
     }
     button.addEventListener('click', connectUni);
+    reconnectUni();
+    navigator.hid.addEventListener('connect', (event) => {
+      if (isPloverHid(event.device)) reconnectUni();
+    });
   }
 
   window.addEventListener('blur', () => { clearChord(); pause(); });
@@ -1487,23 +1532,7 @@
 
   async function init() {
     setupAssists();
-    // The keyboard-diagram picker: QWERTY or the Uni v4. A pure render switch - no reload,
-    // no data change, so it can move freely mid-lesson. Wired before the data load so it
-    // keeps working even when the bundle fails to load.
-    const kbdPicker = $('kbd-picker');
-    kbdPicker.value = state.kbd;
-    kbdPicker.addEventListener('change', (event) => {
-      state.kbd = event.target.value;
-      try {
-        localStorage.setItem(KBD_KEY, state.kbd);
-      } catch {
-        // Without storage the choice still applies, but the next visit starts on QWERTY
-      }
-      renderKeyboard();
-      refresh();
-    });
-    // Show the persisted diagram right away - the first data-driven render is only after
-    // the bundle fetches, and a saved Uni v4 choice should not flash the QWERTY board.
+    // Draw the board right away - the first data-driven render is only after the bundle fetches.
     renderKeyboard();
     // The Uni v4 connect button, also wired before the data load: connecting the machine
     // has no dependency on the bundle, and the button should say so even when it fails.

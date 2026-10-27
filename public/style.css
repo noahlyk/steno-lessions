@@ -454,8 +454,7 @@ body.paused #practice .feedback {
   font-size: 14px;
 }
 
-.theory-picker select,
-.assists-select select {
+.theory-picker select {
   font: inherit;
   color: var(--ink);
   background: var(--card);
@@ -464,8 +463,7 @@ body.paused #practice .feedback {
   padding: 4px 8px;
   cursor: pointer;
 }
-.theory-picker select:hover,
-.assists-select select:hover { border-color: var(--divider); }
+.theory-picker select:hover { border-color: var(--divider); }
 
 /* Assists: every helper behind one nav button, as a popover of switches. */
 .assists { position: relative; }
@@ -552,17 +550,6 @@ body.paused #practice .feedback {
 .switch input:checked + .track::after { transform: translateX(14px); }
 .switch-text { display: grid; color: var(--ink); font-size: 14px; }
 .switch-text small { color: var(--muted); font-size: 12px; }
-
-.assists-sep { height: 1px; margin: 4px 8px; background: var(--line); }
-
-.assists-select {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 4px 8px;
-  color: var(--ink);
-  font-size: 14px;
-}
 
 /* Key hints off: no key names on the keyboard, no keys row, no target highlight */
 .hints-off .key .letter,
@@ -844,6 +831,34 @@ body.paused #practice .feedback {
 .uni-connect button:disabled { opacity: 0.5; cursor: default; }
 
 .uni-connect .muted { color: var(--muted); font-size: 13px; }
+.uni-connect .muted.live { color: var(--good); }
+.uni-connect .muted.live::before { content: "\25CF\00a0"; }
+
+/* Shown only where WebHID doesn't exist (Firefox, Safari): a plain heads-up, not a greyed-out button. */
+.uni-warning {
+  max-width: 560px;
+  margin: 10px auto 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--down);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--down) 14%, var(--card));
+  color: var(--ink);
+  font-size: 13px;
+}
+.uni-warning[hidden] { display: none; }
+.uni-warning button {
+  flex: none;
+  font: inherit;
+  padding: 3px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  cursor: pointer;
+}
 
 .swatch {
   display: inline-block;

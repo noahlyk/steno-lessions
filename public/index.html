@@ -42,11 +42,6 @@
             <input type="checkbox" id="show-keyboard"><span class="track"></span>
             <span class="switch-text">Keyboard diagram<small>Shows the board while you type</small></span>
           </label>
-          <div class="assists-sep"></div>
-          <label class="assists-select" title="Which keyboard diagram to show. Typing works on either - QWERTY keys always, and the Uni v4 once connected.">
-            <span>Diagram</span>
-            <select id="kbd-picker"><option value="qwerty">QWERTY</option><option value="uni">Uni v4</option></select>
-          </label>
         </div>
       </div>
     </div>
@@ -77,8 +72,12 @@
         <span class="swatch down"></span> held
       </p>
       <p class="uni-connect">
-        <button type="button" id="connect-uni">Connect Uni v4</button>
+        <button type="button" id="connect-uni">Connect Plover HID keyboard</button>
         <span id="uni-status" class="muted"></span>
+      </p>
+      <p class="uni-warning" id="uni-warning" role="note" hidden>
+        <span>Using a Plover HID keyboard like the Uni v4? Open this page in <strong>Chrome, Edge or another Chromium browser</strong> &mdash; Firefox and Safari can't read it. QWERTY typing works here as usual.</span>
+        <button type="button" id="uni-warning-dismiss" aria-label="Dismiss">Got it</button>
       </p>
     </section>
   </main>

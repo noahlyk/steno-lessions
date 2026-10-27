@@ -57,11 +57,11 @@ Keys are taken over only when they are steno keys. Ctrl, Alt and Meta combos, an
 
 ## The Uni v4
 
-The Keyboard picker in the header switches the diagram between your QWERTY keyboard and the Uni v4, drawn as the machine really is: a unibody split board, two key rows and a thumb row, all 28 keys in their real places (`S- T- P- H- ★ ★ -F -P -L -T -D` over `S- K- W- R- ★ ★ -R -B -G -S -Z` over `# A- O- -E -U #`). Everything else works the same on it: keys unlock in the same order, locked keys sit dark with no sound, the target stroke is highlighted, and held keys light up — the exact physical key, including which of the split S or star keys you pressed. In Uni v4 mode the "keys to press" line under each word shows steno key names (`A -T`) instead of QWERTY letters (`C P`), because on the machine the key *is* the steno key.
+The keyboard diagram swaps itself to match what you type on: start a stroke on a QWERTY key and it shows your QWERTY keyboard, start one on the machine and it shows the Uni v4, drawn as the machine really is: a unibody split board, two key rows and a thumb row, all 28 keys in their real places (`S- T- P- H- ★ ★ -F -P -L -T -D` over `S- K- W- R- ★ ★ -R -B -G -S -Z` over `# A- O- -E -U #`). Everything else works the same on it: keys unlock in the same order, locked keys sit dark with no sound, the target stroke is highlighted, and held keys light up — the exact physical key, including which of the split S or star keys you pressed. In Uni v4 mode the "keys to press" line under each word shows steno key names (`A -T`) instead of QWERTY letters (`C P`), because on the machine the key *is* the steno key.
 
-To type on the machine itself, click **Connect Uni v4** under the keyboard. The board speaks the Plover HID protocol, and the page reads it over WebHID, so:
+To type on the machine itself, click **Connect Plover HID keyboard** under the keyboard the first time. After that the browser remembers the permission and reconnects on its own (also when you plug the board back in). The board speaks the Plover HID protocol, and the page reads it over WebHID, so:
 
-- Use a Chromium browser (Chrome, Edge, Chromium — Firefox and Safari have no WebHID; the button tells you).
+- Use a Chromium browser (Chrome, Edge, Chromium). Firefox and Safari have no WebHID, so the page cannot see the board there and shows a note saying to switch browsers.
 - Plover can stay connected to the board the whole time — on Linux every reader of the device gets a copy of each report. You do not have to disconnect anything.
 - Consider turning Plover's Output off while practicing: with it on, Plover types its translations into whatever window has focus.
 - QWERTY typing keeps working exactly as before, alongside machine input.
