@@ -89,10 +89,20 @@ is always exactly the window a key's unlock is judged on, following keybr's own 
 
 - You start with 6 keys: `E`, `A`, `T`, `S`, `K` and `-T`. Keys are then introduced in the order in `public/lib/lessons.js` (`KEY_ORDER`).
 - The next key unlocks when the lesson you just finished was fast and accurate enough, and every unlocked key is currently (not all-time) solid:
-  - Speed starts at 30 words per minute and rises to 50 as keys are added. Each word's time counts only active typing: pauses longer than 3 seconds, and time with the page hidden or unfocused, are left out.
+  - Speed must reach 28 words per minute, on every level. Each word's time counts only active typing: pauses longer than 3 seconds, and time with the page hidden or unfocused, are left out.
   - Overall accuracy must be at least 95% of strokes on the first try across the lesson.
-  - Each already-unlocked key also needs its own recent accuracy at or above 90%. This is recency-weighted (like a key's speed average), so a rough patch while a key was still new fades out once you're typing it well — it doesn't permanently block every future unlock the way an all-time average would.
+  - Each chord you have practiced also needs its own recent accuracy at or above 80%. This is a rolling window of your last 30 attempts, so a rough patch while a chord was still new fades out once you're typing it well — it doesn't permanently block every future unlock the way an all-time average would.
 - After a key unlocks, the word count starts again from zero for the new lesson.
+
+## Accuracy is per chord, not per key
+
+A stroke is made of up to four chords: the number bar, the left-hand initials, the vowels (with the star) and the right-hand finals. Each exact combination held together in one of those groups is its own chord with its own record, so `T`, `TH`, `TK` and `TPH` (the n sound) are four separate things. Being good at `T` says nothing about `TPH`, and a bad day on `TPH` never counts against `T`.
+
+- **Scoring:** a right stroke counts for every chord in it. A wrong stroke counts only against the chord that came out wrong, so typing `TH` for `TPH` costs you `TPH`, not the vowel or the final consonants you got right beside it.
+- **Word choice:** words that use a chord you are missing come up much more often, and a chord you have not met yet gets a smaller boost of its own. If the n sound is wrong a lot, you get n sounds.
+- **Drills:** the weakest chord under 85% gets a reserved fifth of the stream, in short words whose other chords are not also weak. When nothing is under 85% it keeps going: a smaller share works whichever chord is relatively weakest (accuracy and speed together), so there is always a weak spot being practiced at every level.
+- **The key chips** are read-only summaries. Hover one to see the chords it appears in, weakest first. The Focus line under them names the chord to work on and any others that are weak.
+- Saves from before this change tracked accuracy per key. Those numbers mix every stroke a key was part of, so they can't be split back into chords and are dropped when the save loads. Your unlocked keys and word history are kept.
 
 ## Limitations
 

@@ -819,29 +819,73 @@
   // What # is, for anyone who has never used a steno number bar.
   const NUMBER_KEY_NOTE = 'Number bar: hold # with S T P H A O (1 2 3 4 5 0) and -F -P -L -T (6 7 8 9) to type digits, like #ST for 12.';
 
+  // Accuracy is kept per chord (the exact combination held together in the left hand, the vowels
+  // or the right hand), so a chord has its own label and, where it has a name, its own sound.
+  // Common compounds in Plover theory; anything else shows as its letters.
+  const CHORD_SOUNDS = {
+    'T-+P-+H-': 'n', 'S-+K-+W-+R-': 'j', 'K-+W-+R-': 'y', 'T-+K-+P-+W-': 'g', 'P-+W-': 'b',
+    'H-+R-': 'l', 'P-+H-': 'm', 'T-+P-': 'f', 'S-+R-': 'v', 'T-+K-': 'd', 'K-+P-': 'x',
+    'S-+T-+K-+P-+W-': 'z', 'S-+H-': 'sh', 'K-+H-': 'ch', 'T-+H-': 'th',
+    '-P+-B': 'n', '-P+-B+-L+-G': 'j', '-F+-R+-P+-B': 'nch', '-F+-P': 'ch', '-R+-B': 'sh',
+    '-P+-L': 'm', '-B+-G': 'k', '-P+-B+-G': 'ng', '-G+-S': 'shun', '-B+-G+-S': 'ction',
+  };
+
+  // Plover-style text for a chord unit: TPH, AO*, -PBLG.
+  function chordLabel(id) {
+    const bits = L.unitKeys(id).reduce((mask, name) => mask | (1 << state.slotIndex.get(name)), 0);
+    return S.displayStroke(bits);
+  }
+
+  // What a chord sounds like: its own name when it has one, else the sound of its single key.
+  function chordSound(id) {
+    if (CHORD_SOUNDS[id]) return CHORD_SOUNDS[id];
+    const keys = L.unitKeys(id);
+    const slot = keys.length === 1 ? state.slotByName.get(keys[0]) : null;
+    return slot ? slot.sound : '';
+  }
+
+  // "TPH (n)", for a chord anywhere in the HUD.
+  function chordName(id) {
+    const sound = chordSound(id);
+    return `${chordLabel(id)}${sound ? ` (${sound})` : ''}`;
+  }
+
+  // One chord's recent accuracy and time, or "new" until it has enough attempts to judge.
+  function chordFigures(progress, id) {
+    const stat = progress.chords[id];
+    if (!stat || stat.recent.length < 5) return 'new';
+    const ms = stat.ewmaMs === null ? '' : ` &middot; ${Math.round(stat.ewmaMs)} ms`;
+    return `${Math.round(L.chordAccuracy(progress, id) * 100)}%${ms}`;
+  }
+
+  // A key's tooltip: nothing is stored per key, so this lists the chords it appears in, weakest
+  // first. That is how you see that T is fine on its own but T-P-H- (n) is the problem.
   function keyTooltipHtml(progress, name) {
     const slot = state.slotByName.get(name);
     const header = `<strong>${escapeHtml(S.displayName(name))}</strong>` +
       (slot ? `<span class="kt-sound">${escapeHtml(slot.sound)}</span>` : '') +
       (name === '#' ? `<div class="kt-row note">${escapeHtml(NUMBER_KEY_NOTE)}</div>` : '');
-    const stat = progress.keys[name];
-    if (!stat || stat.ewmaMs === null || stat.samples < 5) {
-      return `${header}<div class="kt-row muted">Not calibrated yet - needs more reps.</div>`;
+    const ids = L.chordsWithKey(progress, name);
+    if (ids.length === 0) {
+      return `${header}<div class="kt-row muted">Not typed yet - needs more reps.</div>`;
     }
-    const chordMs = Math.round(stat.ewmaMs);
-    const accuracy = Math.round(L.keyAccuracy(progress, name) * 100);
-    const confidence = Math.round(L.confidence(progress, name) * 100);
-    const tierLabel = ['Learning', 'Solid', 'Mastered'][L.masteryTier(progress, name)];
-    return `${header}` +
-      `<div class="kt-row"><span>Accuracy</span><span>${accuracy}%</span></div>` +
-      `<div class="kt-row"><span>Chord time</span><span>${chordMs} ms</span></div>` +
-      `<div class="kt-row"><span>Confidence</span><span>${confidence}% (${tierLabel})</span></div>`;
+    const ranked = ids
+      .map((id) => ({ id, accuracy: L.chordAccuracy(progress, id), attempts: progress.chords[id].recent.length }))
+      .sort((a, b) => a.accuracy - b.accuracy || b.attempts - a.attempts);
+    const shown = ranked.slice(0, 6);
+    const rows = shown.map(({ id }) =>
+      `<div class="kt-row"><span>${escapeHtml(chordName(id))}</span><span>${chordFigures(progress, id)}</span></div>`).join('');
+    const more = ranked.length > shown.length ? `<div class="kt-row muted">+${ranked.length - shown.length} more chords</div>` : '';
+    const tierLabel = ['Learning', 'Solid', 'Mastered'][L.keyTier(progress, name)];
+    return `${header}${rows}${more}` +
+      `<div class="kt-row"><span>Overall</span><span>${tierLabel}</span></div>`;
   }
 
   // Row 2: one chip per key, unlocked keys tinted by confidence, the focus key outlined.
   function renderKeyChips() {
     const { progress } = state;
-    const focus = L.focusKey(progress);
+    // The focus can be a single key or a chord being failed; every key in it is outlined.
+    const focusKeys = L.unitKeys(L.focusChord(progress) || '');
     const list = $('key-chips');
     list.textContent = '';
     // The chips are rebuilt from scratch below, which would otherwise leave a tooltip pointing
@@ -851,11 +895,12 @@
       const chip = document.createElement('li');
       const unlocked = index < progress.unlocked;
       chip.classList.toggle('locked', !unlocked);
-      chip.classList.toggle('current', unlocked && name === focus);
+      chip.classList.toggle('current', unlocked && focusKeys.includes(name));
       // Cubed so the chip reads as red/at-risk well before confidence actually bottoms out -
-      // a key that's merely "pretty good" should still visibly warn, not look fully green.
-      if (unlocked) chip.style.setProperty('--conf', (L.confidence(progress, name) ** 3).toFixed(2));
-      if (unlocked) chip.classList.add(`tier-${L.masteryTier(progress, name)}`);
+      // a key that's merely "pretty good" should still visibly warn, not look fully green. A
+      // key's tint and tier are read from the chords it appears in (see keyConfidence/keyTier).
+      if (unlocked) chip.style.setProperty('--conf', (L.keyConfidence(progress, name) ** 3).toFixed(2));
+      if (unlocked) chip.classList.add(`tier-${L.keyTier(progress, name)}`);
       chip.textContent = S.displayName(name);
       const tooltipHtml = unlocked
         ? keyTooltipHtml(progress, name)
@@ -917,27 +962,34 @@
     refresh();
   }
 
-  // Row 3: the key most in need of practice right now, and what we know about it.
+  // Row 3: what most needs practice right now - a key not yet known, or the chord being missed
+  // most - and any other chords that are weak.
   function renderCurrentKey() {
     const { progress } = state;
-    const name = L.focusKey(progress);
+    const focus = L.focusChord(progress);
     const el = $('current-key');
-    if (!name) {
-      el.innerHTML = '<span class="muted">No key to focus on yet.</span>';
+    if (!focus) {
+      el.innerHTML = '<span class="muted">Nothing to focus on yet.</span>';
       return;
     }
-    const stat = progress.keys[name];
-    const slot = state.slotByName.get(name);
-    const label = `<span class="chip-name">${escapeHtml(S.displayName(name))}</span>` +
-      (name === '#' ? ` <span class="muted">${escapeHtml(NUMBER_KEY_NOTE)}</span><br>` : '');
+    const stat = progress.chords[focus];
+    const label = `<span class="chip-name">${escapeHtml(chordLabel(focus))}</span>` +
+      (focus === '#' ? ` <span class="muted">${escapeHtml(NUMBER_KEY_NOTE)}</span><br>` : '');
+    const sound = chordSound(focus);
+    const soundText = sound ? ` (${escapeHtml(sound)})` : '';
+    let text;
     if (!stat || stat.ewmaMs === null || stat.samples < 5) {
-      el.innerHTML = `${label} <span class="muted">Not calibrated, need more samples.</span>`;
-      return;
+      text = `${label} <span class="muted">Not calibrated, need more samples${soundText}.</span>`;
+    } else {
+      const accuracy = Math.round(L.chordAccuracy(progress, focus) * 100);
+      text = `${label} <span class="muted">${Math.round(stat.ewmaMs)}ms per chord, ${accuracy}% accuracy${soundText}.</span>`;
     }
-    const chordMs = Math.round(stat.ewmaMs);
-    const accuracy = Math.round(L.keyAccuracy(progress, name) * 100);
-    el.innerHTML =
-      `${label} <span class="muted">${chordMs}ms per chord, ${accuracy}% accuracy${slot ? ` (${escapeHtml(slot.sound)})` : ''}.</span>`;
+    const others = L.weakChords(progress, 4)
+      .filter((chord) => chord.id !== focus && chord.accuracy < L.DRILL_ACCURACY)
+      .slice(0, 3)
+      .map((chord) => `<span class="chip-name">${escapeHtml(chordLabel(chord.id))}</span> ${Math.round(chord.accuracy * 100)}%`);
+    if (others.length > 0) text += ` <span class="muted">Also weak:</span> ${others.join(', ')}`;
+    el.innerHTML = text;
   }
 
   // The last 10 finished lessons, as two rows (Speed above Accuracy) in a grid, one column
@@ -972,8 +1024,8 @@
   }
 
   // Overall window stats (speed, accuracy, word count) can all clear their targets while one
-  // specific unlocked key is still individually below KEY_ACCURACY_TARGET - that key alone
-  // blocks the unlock, invisibly, unless called out here.
+  // specific chord is still individually below CHORD_ACCURACY_TARGET - that chord alone blocks
+  // the unlock, invisibly, unless called out here.
   function renderUnlockStatus() {
     const { progress } = state;
     const el = $('unlock-status');
@@ -985,13 +1037,13 @@
     const overallReady = stats.count >= L.LESSON_SIZE
       && stats.wpm >= L.wpmTarget(progress.level)
       && stats.accuracy >= L.ACCURACY_TARGET;
-    const blocking = L.unlockedNames(progress).filter((name) => L.keyAccuracy(progress, name) < L.KEY_ACCURACY_TARGET);
+    const blocking = L.weakChords(progress, 99).filter((chord) => chord.accuracy < L.CHORD_ACCURACY_TARGET);
     if (overallReady && blocking.length > 0) {
       const names = blocking
-        .map((name) => `${S.displayName(name)} (${Math.round(L.keyAccuracy(progress, name) * 100)}%)`)
+        .map((chord) => `${escapeHtml(chordName(chord.id))} (${Math.round(chord.accuracy * 100)}%)`)
         .join(', ');
-      el.innerHTML = `<span class="hud-label">Blocking unlock:</span> <span class="bad">${escapeHtml(names)} - ` +
-        `needs ${Math.round(L.KEY_ACCURACY_TARGET * 100)}%+ on each key, not just overall.</span>`;
+      el.innerHTML = `<span class="hud-label">Blocking unlock:</span> <span class="bad">${names} - ` +
+        `needs ${Math.round(L.CHORD_ACCURACY_TARGET * 100)}%+ on each chord, not just overall.</span>`;
     } else {
       el.textContent = '';
     }
@@ -1119,7 +1171,7 @@
     if (fitted) {
       // The next stroke, or the first stroke of a spelling: the word is being redone from the start,
       // so the strokes typed before are replaced by this one.
-      L.recordChord(state.progress, S.namesInBits(used), ms, true);
+      L.recordStroke(state.progress, { used: S.namesInBits(used), ms, correct: true });
       state.failures = [];
       state.previewBits = 0;
       if (fitted.type === 'restart') {
@@ -1147,9 +1199,10 @@
     // as one inaccuracy for the word, not one per attempt.
     state.wordMisses = 1;
     state.wordWrongChords += 1;
-    // Blame only the keys that were wrong (missed or extra), not the whole stroke, so one
-    // slip on a key doesn't also count against the keys pressed correctly beside it.
-    L.recordChord(state.progress, S.namesInBits((target ^ used) & target || target), ms, false);
+    // Blame only the chords that came out wrong - the n sound (T-P-H-) typed as T-H-, say - not
+    // the whole stroke, so a slip on one chord doesn't also count against the vowel or the
+    // finals pressed correctly beside it. Accuracy is kept per chord, never per key.
+    L.recordStroke(state.progress, { target: S.namesInBits(target), used: S.namesInBits(used), ms, correct: false });
     // Only the latest mistake is ever shown or undoable - repeating the same wrong chord,
     // or making a different one, replaces it rather than piling on top of it. There is
     // never more than one live mistake to track at once.
@@ -1184,8 +1237,8 @@
     L.recordWord(state.progress, { ms: state.wordMs, strokes: state.strokeIdx, misses: state.wordMisses });
     // A forced probe word's timing is also logged apart from the normal blended ewmaMs, so
     // kinematicGap can compare isolated-rep speed against everyday blended speed.
-    if (finished.isProbe && finished.focusKeyAtPick) {
-      L.recordProbe(state.progress, finished.focusKeyAtPick, state.wordMs);
+    if (finished.isProbe && finished.focusChordAtPick) {
+      L.recordProbe(state.progress, finished.focusChordAtPick, state.wordMs);
     }
     state.typed += 1;
     // The finished word stays in the stream where it is, grayed out, instead of vanishing and

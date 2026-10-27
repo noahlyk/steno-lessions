@@ -22,8 +22,9 @@
   const LESSON_SIZE = 30;
   // Share of strokes that must be right on the first try.
   const ACCURACY_TARGET = 0.95;
-  // Share of attempts on a single key that must be right before it can gate an unlock.
-  const KEY_ACCURACY_TARGET = 0.8;
+  // Share of attempts on a single chord that must be right before it can gate an unlock.
+  // Accuracy is judged per chord, not per key: see "Chord units" below.
+  const CHORD_ACCURACY_TARGET = 0.8;
   // Completed words kept in the history. Only the newest LESSON_SIZE matter for unlocking.
   const HISTORY_LIMIT = 100;
   // Time added to a stroke's average for each miss on it.
@@ -36,16 +37,20 @@
   const MAX_WORD_LENGTH = 9;
   // Finished lessons' accuracy kept for the streak summary.
   const LESSON_HISTORY_LIMIT = 10;
-  // Attempts on one key kept for its rolling accuracy, so the unlock gate reflects recent
+  // Attempts on one chord kept for its rolling accuracy, so the unlock gate reflects recent
   // play (about one lesson's worth) instead of a lifetime total that's nearly impossible to
-  // move once a key has thousands of samples.
-  const KEY_ACCURACY_WINDOW = 30;
-  // Keys under this recent accuracy get a reserved share of words that contain them, so a key
-  // stuck below KEY_ACCURACY_TARGET still gets the reps it needs to climb out.
+  // move once a chord has thousands of samples.
+  const CHORD_ACCURACY_WINDOW = 30;
+  // Chords under this recent accuracy get a reserved share of words that contain them, so a
+  // chord stuck below CHORD_ACCURACY_TARGET still gets the reps it needs to climb out.
   const DRILL_ACCURACY = 0.85;
   const DRILL_SHARE = 0.2;
-  // Attempts needed on a key before its rolling accuracy can gate an unlock.
-  const KEY_ACCURACY_MIN_SAMPLES = 5;
+  // When no chord is under DRILL_ACCURACY there is still something to improve: this smaller
+  // share goes to whichever practiced chord is relatively weakest (accuracy and speed), so the
+  // stream keeps working a weak spot at every level instead of idling once things look fine.
+  const STEADY_DRILL_SHARE = 0.15;
+  // Attempts needed on a chord before its rolling accuracy can gate an unlock.
+  const CHORD_ACCURACY_MIN_SAMPLES = 5;
   // The etude<->concerto complexity slider, 0-100. Below ETUDE_MAX: isolated, minimal-load
   // reps on the focus key alone (an "etude"). Above CONCERTO_MIN: full-length words that
   // deliberately recombine several recently-unlocked keys together (a "concerto"). Between
@@ -67,22 +72,25 @@
   // blended speed. Isolated reps should always be comfortably faster; a gap below this means
   // word complexity is not the real bottleneck - raw chord-formation speed is.
   const HEALTHY_PROBE_GAP = 0.2;
-  // How hard word weighting leans toward a chord's single weakest unlocked key: at weakness 1
-  // (fully unknown/inaccurate) a word's weight multiplies by (1 + WEAKNESS_GAIN); at weakness 0
-  // it's untouched. Squared in `weaknessBoost` so the curve favors genuinely extreme weakness
-  // much more than merely moderate weakness, instead of scaling linearly with it. Tuned
-  // (empirically, against real play data) so a key sitting around 60% accuracy while
+  // How hard word weighting leans toward the single weakest chord unit in a word: at weakness 1
+  // (always wrong) a word's weight multiplies by (1 + WEAKNESS_GAIN); at weakness 0 it's
+  // untouched. Squared in `weaknessBoost` so the curve favors genuinely extreme weakness much
+  // more than merely moderate weakness, instead of scaling linearly with it. Tuned
+  // (empirically, against real play data) so a chord sitting around 60% accuracy while
   // everything else is 85%+ lands in roughly the 50% range of words it's eligible for.
   const WEAKNESS_GAIN = 150;
-  // Correct reps (recordChord samples) during which a freshly-unlocked key is treated as
-  // maximally weak for word selection, regardless of how fast its measured `confidence`
-  // happens to climb. confidence can read near 1 after as few as SAMPLES_TO_LEARN good reps,
-  // which is not enough real practice for the key to have earned losing its selection
-  // priority to whichever other key is now the single lowest-confidence one.
-  const NEW_KEY_GRACE_SAMPLES = 15;
+  // Correct reps (recordChord samples) during which a chord is treated as not yet known for
+  // word selection, regardless of how fast its measured `confidence` happens to climb.
+  // confidence can read near 1 after as few as SAMPLES_TO_LEARN good reps, which is not
+  // enough real practice for the chord to have earned losing its selection priority.
+  const CHORD_GRACE_SAMPLES = 8;
+  // How weak a chord that has never been typed (or is still inside its grace period) counts
+  // as: well short of "always wrong", so a chord you are actually failing outranks one you
+  // simply have not met yet, but far above a chord that is known.
+  const UNSEEN_WEAKNESS = 0.35;
 
   // Words per minute needed to unlock the next key. A flat bar for every key - per-key
-  // accuracy gating (KEY_ACCURACY_TARGET) is what actually proves a new key is mastered,
+  // accuracy gating (CHORD_ACCURACY_TARGET) is what actually proves a new key is mastered,
   // so a rising speed target on top of that only punished the lesson right after a brand
   // new, still-unfamiliar key was introduced.
   // Per prestige level. 1: any visual aid (keyboard diagram or key hints) may be on.
@@ -123,7 +131,8 @@
   function emptyProgress() {
     return {
       unlocked: START_KEYS,
-      keys: {},
+      // Accuracy and speed per chord unit (see "Chord units"): chord id -> stat.
+      chords: {},
       words: [],
       lessonHistory: [],
       totalTyped: 0,
@@ -142,7 +151,7 @@
 
   // The per-level fields of a progress object. Everything else (scaffold checkboxes,
   // totalTyped) is shared across levels.
-  const LEVEL_FIELDS = ['unlocked', 'keys', 'words', 'lessonHistory', 'scaffoldMarks'];
+  const LEVEL_FIELDS = ['unlocked', 'chords', 'words', 'lessonHistory', 'scaffoldMarks'];
 
   function pickLevelFields(progress) {
     const slice = {};
@@ -158,7 +167,7 @@
       const active = level === progress.level;
       const slice = active ? progress : progress.stash[level];
       const unlocked = slice ? slice.unlocked : START_KEYS;
-      const started = active || Boolean(slice && (slice.unlocked > START_KEYS || Object.keys(slice.keys).length > 0));
+      const started = active || Boolean(slice && (slice.unlocked > START_KEYS || Object.keys(slice.chords).length > 0));
       rows.push({
         level,
         wpm: LEVEL_WPM[level],
@@ -193,16 +202,18 @@
     if (Number.isInteger(saved.unlocked)) {
       progress.unlocked = Math.min(Math.max(saved.unlocked, 1), KEY_ORDER.length);
     }
-    if (saved.keys && typeof saved.keys === 'object') {
-      for (const name of KEY_ORDER) {
-        const stat = saved.keys[name];
-        if (!stat || typeof stat !== 'object') continue;
-        progress.keys[name] = {
+    // Stats saved before accuracy was judged per chord (`keys`) pooled every stroke a key was
+    // part of, so they cannot be split back into chords: they are dropped, not guessed at.
+    if (saved.chords && typeof saved.chords === 'object') {
+      for (const id of Object.keys(saved.chords)) {
+        const stat = saved.chords[id];
+        if (!isChordId(id) || !stat || typeof stat !== 'object') continue;
+        progress.chords[id] = {
           samples: Math.max(0, Number(stat.samples) || 0),
           ewmaMs: typeof stat.ewmaMs === 'number' ? stat.ewmaMs : null,
           misses: Math.max(0, Number(stat.misses) || 0),
           recent: Array.isArray(stat.recent)
-            ? stat.recent.filter((hit) => hit === 0 || hit === 1).slice(-KEY_ACCURACY_WINDOW)
+            ? stat.recent.filter((hit) => hit === 0 || hit === 1).slice(-CHORD_ACCURACY_WINDOW)
             : [],
           probeRecent: Array.isArray(stat.probeRecent)
             ? stat.probeRecent.filter((ms) => Number.isFinite(ms) && ms > 0).slice(-PROBE_WINDOW)
@@ -267,25 +278,111 @@
     return KEY_ORDER.slice(0, progress.unlocked);
   }
 
-  // Records one chord: `names` are the steno keys it pressed, `ms` how long it took.
+  // ---- Chord units ----
+  // Accuracy is judged per chord, not per key. A stroke splits into up to four chord units: the
+  // number bar, the left-hand initials, the vowels (with the star) and the right-hand finals. A
+  // unit is the exact combination held together in one of those groups, so T-, T-P-H- (the n
+  // sound), T-K- and T-H- are four different units with four separate records: how often you get
+  // TPH right says nothing about T alone, and vice versa. A unit's id is its key names joined
+  // with "+" in steno order; a unit of one key is simply that key's name.
+  const LEFT_KEYS = ['S-', 'T-', 'K-', 'P-', 'W-', 'H-', 'R-'];
+  const MIDDLE_KEYS = ['A-', 'O-', '*', '-E', '-U'];
+  const RIGHT_KEYS = ['-F', '-R', '-P', '-B', '-L', '-G', '-T', '-S', '-D', '-Z'];
+  const UNIT_GROUPS = [['#'], LEFT_KEYS, MIDDLE_KEYS, RIGHT_KEYS];
+  const KEY_RANK = new Map();
+  const KEY_GROUP = new Map();
+  UNIT_GROUPS.forEach((group, groupIndex) => {
+    for (const name of group) {
+      KEY_RANK.set(name, KEY_RANK.size);
+      KEY_GROUP.set(name, groupIndex);
+    }
+  });
+
+  // The chord unit ids a set of key names makes, in steno order (number bar, left, vowels, right).
+  function chordUnits(names) {
+    const groups = UNIT_GROUPS.map(() => []);
+    for (const name of new Set(names)) {
+      if (KEY_GROUP.has(name)) groups[KEY_GROUP.get(name)].push(name);
+    }
+    return groups
+      .filter((group) => group.length > 0)
+      .map((group) => group.sort((a, b) => KEY_RANK.get(a) - KEY_RANK.get(b)).join('+'));
+  }
+
+  // The key names inside a chord unit id.
+  function unitKeys(id) {
+    return id.split('+');
+  }
+
+  // Whether `id` is a chord unit id this engine could have made: real keys, all from one group,
+  // in steno order. A damaged save's junk ids are dropped by this.
+  function isChordId(id) {
+    if (typeof id !== 'string') return false;
+    const parts = id.split('+');
+    const group = KEY_GROUP.get(parts[0]);
+    if (group === undefined) return false;
+    return parts.every((name, i) => KEY_GROUP.get(name) === group && (i === 0 || KEY_RANK.get(name) > KEY_RANK.get(parts[i - 1])));
+  }
+
+  // The chord units of a stroke mask, cached per mask (a dictionary scan asks about the same
+  // few thousand strokes again and again).
+  const unitCaches = new WeakMap();
+  function unitsOfBits(bits, slotIndex) {
+    let cache = unitCaches.get(slotIndex);
+    if (!cache) {
+      cache = new Map();
+      unitCaches.set(slotIndex, cache);
+    }
+    let ids = cache.get(bits);
+    if (!ids) {
+      const names = [];
+      for (const [name, index] of slotIndex) {
+        if (bits & (1 << index)) names.push(name);
+      }
+      ids = chordUnits(names);
+      cache.set(bits, ids);
+    }
+    return ids;
+  }
+
+  function blankStat() {
+    return { samples: 0, ewmaMs: null, misses: 0, recent: [], probeRecent: [] };
+  }
+
+  // Records one result for each chord unit id in `ids`, `ms` being how long the stroke took.
   // A miss adds a penalty to the average rather than counting as a sample.
-  function recordChord(progress, names, ms, correct) {
-    for (const name of names) {
-      const stat = progress.keys[name] || { samples: 0, ewmaMs: null, misses: 0, recent: [], probeRecent: [] };
+  function recordChord(progress, ids, ms, correct) {
+    for (const id of ids) {
+      if (!isChordId(id)) continue;
+      const stat = progress.chords[id] || blankStat();
       const cost = correct ? ms : ms + MISS_PENALTY_MS;
       stat.ewmaMs = stat.ewmaMs === null ? cost : stat.ewmaMs * 0.7 + cost * 0.3;
       // A plain rolling window (not an EWMA), so a single recent miss can't swing the gate by
       // itself and a bad patch from thousands of attempts ago can't keep it stuck either -
-      // only the last KEY_ACCURACY_WINDOW attempts on this key count.
-      stat.recent = [...(stat.recent || []), correct ? 1 : 0].slice(-KEY_ACCURACY_WINDOW);
+      // only the last CHORD_ACCURACY_WINDOW attempts on this chord count.
+      stat.recent = [...(stat.recent || []), correct ? 1 : 0].slice(-CHORD_ACCURACY_WINDOW);
       if (correct) {
         stat.samples += 1;
       } else {
         stat.misses += 1;
       }
-      progress.keys[name] = stat;
+      progress.chords[id] = stat;
     }
     return progress;
+  }
+
+  // Records one stroke from the steno keys it pressed (`used`) against the keys it needed
+  // (`target`). A right stroke counts for every chord unit in it. A wrong one counts against
+  // only the chords the learner failed to produce, so a slip on the n sound (T-P-H-) does not
+  // also count against the vowel or the final consonants they got right beside it. If every
+  // needed chord is there and the stroke was wrong only by an extra key, the whole target is
+  // blamed, since there is no single chord to point at.
+  function recordStroke(progress, { target = [], used, ms, correct }) {
+    const usedUnits = chordUnits(used);
+    if (correct) return recordChord(progress, usedUnits, ms, true);
+    const targetUnits = chordUnits(target);
+    const wrong = targetUnits.filter((id) => !usedUnits.includes(id));
+    return recordChord(progress, wrong.length > 0 ? wrong : targetUnits, ms, false);
   }
 
   // Records one completed word: `ms` from its first key to its last, `strokes` strokes
@@ -323,19 +420,20 @@
     return Math.round(stats.wpm * stats.accuracy * 20);
   }
 
-  // Share of the last KEY_ACCURACY_WINDOW attempts on one key that were right. 1 (not a gate)
-  // if the key hasn't been attempted enough yet, so it doesn't block unlocking before there's
+  // Share of the last CHORD_ACCURACY_WINDOW attempts on one chord that were right. 1 (not a gate)
+  // if the chord hasn't been attempted enough yet, so it doesn't block unlocking before there's
   // enough recent data, and so it can't trap you on a bad patch forever - it clears as soon as
   // enough recent attempts are good, no matter how many total attempts came before.
-  function keyAccuracy(progress, name) {
-    const stat = progress.keys[name];
-    if (!stat || stat.recent.length < KEY_ACCURACY_MIN_SAMPLES) return 1;
+  function chordAccuracy(progress, id) {
+    const stat = progress.chords[id];
+    if (!stat || stat.recent.length < CHORD_ACCURACY_MIN_SAMPLES) return 1;
     return stat.recent.reduce((sum, hit) => sum + hit, 0) / stat.recent.length;
   }
 
-  // Whether every unlocked key is individually accurate enough, not just the overall average.
-  function keysAccurateEnough(progress) {
-    return unlockedNames(progress).every((name) => keyAccuracy(progress, name) >= KEY_ACCURACY_TARGET);
+  // Whether every chord you have practiced is individually accurate enough, not just the
+  // overall average.
+  function chordsAccurateEnough(progress) {
+    return Object.keys(progress.chords).every((id) => chordAccuracy(progress, id) >= CHORD_ACCURACY_TARGET);
   }
 
   // Whether the newest words are fast and accurate enough to unlock the next key.
@@ -344,7 +442,7 @@
     return stats.count >= LESSON_SIZE
       && stats.wpm >= wpmTarget(progress.level)
       && stats.accuracy >= ACCURACY_TARGET
-      && keysAccurateEnough(progress);
+      && chordsAccurateEnough(progress);
   }
 
   function canUnlock(progress) {
@@ -398,55 +496,127 @@
     return progress;
   }
 
-  // 0 to 1: how well a key is known. Shown as the key's bar, and used to pick the key that
-  // most needs practice. Needs samples and speed, and accuracy: a key typed fast but wrong
-  // a lot is not actually known, even though it would look full on speed alone.
-  function confidence(progress, name) {
-    const stat = progress.keys[name];
+  // 0 to 1: how well a chord is known. Needs samples and speed, and accuracy: a chord typed fast
+  // but wrong a lot is not actually known, even though it would look full on speed alone.
+  function confidence(progress, id) {
+    const stat = progress.chords[id];
     if (!stat || stat.ewmaMs === null) return 0;
     const enough = Math.min(1, stat.samples / SAMPLES_TO_LEARN);
     const speed = Math.min(1, TARGET_MS / stat.ewmaMs);
-    const accuracy = Math.min(1, keyAccuracy(progress, name) / KEY_ACCURACY_TARGET);
+    const accuracy = Math.min(1, chordAccuracy(progress, id) / CHORD_ACCURACY_TARGET);
     return enough * speed * accuracy;
   }
 
-  // The unlocked key that needs the most practice. Ties go to the one introduced later.
-  function focusKey(progress) {
-    let focus = null;
-    let weakest = Infinity;
-    for (const name of unlockedNames(progress)) {
-      const score = confidence(progress, name);
-      if (score <= weakest) {
-        weakest = score;
-        focus = name;
-      }
-    }
-    return focus;
-  }
-
-  // 0 (learning), 1 (solid), 2 (fully sustained): how settled a key is, for fading scaffolds.
-  // Both tiers need the whole rolling accuracy window full (KEY_ACCURACY_WINDOW real recent
-  // attempts on this exact key), not just "enough samples to count" - confidence alone can
+  // 0 (learning), 1 (solid), 2 (fully sustained): how settled a chord is, for fading scaffolds.
+  // Both tiers need the whole rolling accuracy window full (CHORD_ACCURACY_WINDOW real recent
+  // attempts on this exact chord), not just "enough samples to count" - confidence alone can
   // read as high after only a handful of reps (its own samples ramp tops out at just
-  // SAMPLES_TO_LEARN), which let a scaffold fade within the first few words after a key
-  // unlocked for anyone with real practice history on the *other* keys, and flicker as a
-  // live EWMA confidence bounced across the threshold. Requiring the full window means a
-  // scaffold only ever fades after real, sustained practice on that specific key.
-  function masteryTier(progress, name) {
-    const stat = progress.keys[name];
-    if (!stat || stat.recent.length < KEY_ACCURACY_WINDOW) return 0;
-    const conf = confidence(progress, name);
+  // SAMPLES_TO_LEARN), which let a scaffold fade within the first few words after something new
+  // appeared and flicker as a live EWMA confidence bounced across the threshold.
+  function masteryTier(progress, id) {
+    const stat = progress.chords[id];
+    if (!stat || stat.recent.length < CHORD_ACCURACY_WINDOW) return 0;
+    const conf = confidence(progress, id);
     if (conf >= MASTERY_TIER_2_CONFIDENCE) return 2;
     if (conf >= MASTERY_TIER_1_CONFIDENCE) return 1;
     return 0;
   }
 
-  // The lowest mastery tier among unlocked keys: a scaffold only fades once every unlocked
+  // The chord ids you have practiced that include a given key.
+  function chordsWithKey(progress, name) {
+    return Object.keys(progress.chords).filter((id) => unitKeys(id).includes(name));
+  }
+
+  // Read-only views of a single key, rolled up from the chords it appears in. Nothing is stored
+  // per key: these exist for the key chips, unlock-order decisions and the scaffold fade.
+  //
+  // How well a key is known: its best chord, since a key you have typed well in some
+  // combination is not a stranger, and a key never typed at all reads 0.
+  function keyConfidence(progress, name) {
+    let best = 0;
+    for (const id of chordsWithKey(progress, name)) best = Math.max(best, confidence(progress, id));
+    return best;
+  }
+
+  // A key's settled tier: its best chord's, but 0 outright while any chord it is part of is
+  // being failed - a key is not "solid" while one of its combinations is a weak spot.
+  function keyTier(progress, name) {
+    let best = 0;
+    for (const id of chordsWithKey(progress, name)) {
+      if (chordAccuracy(progress, id) < DRILL_ACCURACY) return 0;
+      best = Math.max(best, masteryTier(progress, id));
+    }
+    return best;
+  }
+
+  // Total correct reps and misses across every chord a key is part of.
+  function keyTotals(progress, name) {
+    let samples = 0;
+    let misses = 0;
+    for (const id of chordsWithKey(progress, name)) {
+      samples += progress.chords[id].samples;
+      misses += progress.chords[id].misses;
+    }
+    return { samples, misses };
+  }
+
+  // Practiced chords failing right now: under DRILL_ACCURACY with enough recent attempts to say so.
+  function weakChordIds(progress) {
+    return Object.keys(progress.chords).filter((id) => chordAccuracy(progress, id) < DRILL_ACCURACY);
+  }
+
+  // What most needs practice: the unlocked key you know least (a brand new key reads 0), or a
+  // chord you are failing, whichever is lowest. Ties go to the one introduced later. The id is a
+  // chord unit id (a key's own name stands for that key alone). Young chords that are merely
+  // new are not candidates - only ones actually being missed - so a fresh combination does not
+  // hijack the focus before there is any evidence it is hard.
+  function focusInfo(progress) {
+    let focus = null;
+    let weakest = Infinity;
+    for (const name of unlockedNames(progress)) {
+      const score = keyConfidence(progress, name);
+      if (score <= weakest) {
+        weakest = score;
+        focus = { id: name, confidence: score };
+      }
+    }
+    for (const id of weakChordIds(progress)) {
+      const score = confidence(progress, id);
+      if (score <= weakest) {
+        weakest = score;
+        focus = { id, confidence: score };
+      }
+    }
+    return focus;
+  }
+
+  function focusChord(progress) {
+    const focus = focusInfo(progress);
+    return focus ? focus.id : null;
+  }
+
+  // The practiced chords in order of how much they need work: lowest recent accuracy first, then
+  // lowest confidence. Only chords with enough recent attempts to judge. For the HUD.
+  function weakChords(progress, count = 3) {
+    return Object.keys(progress.chords)
+      .filter((id) => progress.chords[id].recent.length >= CHORD_ACCURACY_MIN_SAMPLES)
+      .map((id) => ({
+        id,
+        accuracy: chordAccuracy(progress, id),
+        ms: progress.chords[id].ewmaMs,
+        attempts: progress.chords[id].recent.length,
+        confidence: confidence(progress, id),
+      }))
+      .sort((a, b) => a.accuracy - b.accuracy || a.confidence - b.confidence)
+      .slice(0, count);
+  }
+
+  // The lowest settled tier among unlocked keys: a scaffold only fades once every unlocked
   // key, not just the newest one, is ready for less help.
   function scaffoldTier(progress) {
     const names = unlockedNames(progress);
     if (names.length === 0) return 0;
-    return Math.min(...names.map((name) => masteryTier(progress, name)));
+    return Math.min(...names.map((name) => keyTier(progress, name)));
   }
 
   // Whether a scaffold should be shown: exactly its checkbox. Unchecking hides it right away;
@@ -473,8 +643,7 @@
     progress.scaffoldMarks = progress.scaffoldMarks || {};
     const marks = {};
     for (const name of unlockedNames(progress)) {
-      const stat = progress.keys[name];
-      marks[name] = { samples: stat ? stat.samples : 0, misses: stat ? stat.misses : 0 };
+      marks[name] = keyTotals(progress, name);
     }
     progress.scaffoldMarks[stage] = marks;
   }
@@ -490,7 +659,7 @@
   // Whether every unlocked key has been mastered (tier 2) using only practice recorded since
   // `stage` last went off - not just mastered right now while it happens to be off. A key needs
   // `SAMPLES_TO_LEARN` fresh correct reps (confidence's own "enough practice" bar) and
-  // `KEY_ACCURACY_WINDOW` fresh attempts (enough to have fully displaced its pre-mark accuracy
+  // `CHORD_ACCURACY_WINDOW` fresh attempts (enough to have fully displaced its pre-mark accuracy
   // window) since the mark, on top of currently reading as tier 2.
   function scaffoldRedoMastered(progress, stage) {
     const names = unlockedNames(progress);
@@ -501,22 +670,22 @@
     if (names.length === 0 || !progress.scaffoldMarks || !progress.scaffoldMarks[stage]) return false;
     const marks = progress.scaffoldMarks[stage];
     return names.every((name) => {
-      if (masteryTier(progress, name) < 2) return false;
-      const stat = progress.keys[name];
-      if (!stat) return false;
+      if (keyTier(progress, name) < 2) return false;
+      const stat = keyTotals(progress, name);
+      if (stat.samples + stat.misses === 0) return false;
       const mark = marks[name] || { samples: 0, misses: 0 };
       const freshSamples = stat.samples - mark.samples;
       const freshAttempts = stat.samples + stat.misses - (mark.samples + mark.misses);
-      return freshSamples >= SAMPLES_TO_LEARN && freshAttempts >= KEY_ACCURACY_WINDOW;
+      return freshSamples >= SAMPLES_TO_LEARN && freshAttempts >= CHORD_ACCURACY_WINDOW;
     });
   }
 
-  // The etude<->concerto dial, 0-100: how ready the focus key is, reusing the same signal
-  // that already drives its HUD bar. Recomputed fresh every call, no state of its own.
+  // The etude<->concerto dial, 0-100: how ready the focus is, reusing the same signal that
+  // already drives its HUD bar. Recomputed fresh every call, no state of its own.
   function complexityScore(progress) {
-    const focus = focusKey(progress);
+    const focus = focusInfo(progress);
     if (!focus) return 0;
-    return confidence(progress, focus) * 100;
+    return focus.confidence * 100;
   }
 
   function complexityBand(score) {
@@ -525,22 +694,23 @@
     return 'study';
   }
 
-  // Appends one isolated-rep timing for `name`, kept apart from the normal blended ewmaMs so
+  // Appends one isolated-rep timing for chord `id`, kept apart from the normal blended ewmaMs so
   // probe (isolated) speed and everyday (blended) speed can be compared.
-  function recordProbe(progress, name, ms) {
-    const stat = progress.keys[name] || { samples: 0, ewmaMs: null, misses: 0, recent: [], probeRecent: [] };
+  function recordProbe(progress, id, ms) {
+    if (!isChordId(id)) return progress;
+    const stat = progress.chords[id] || blankStat();
     stat.probeRecent = [...(stat.probeRecent || []), ms].slice(-PROBE_WINDOW);
-    progress.keys[name] = stat;
+    progress.chords[id] = stat;
     return progress;
   }
 
-  // How much faster `name`'s isolated probe reps are than its everyday blended speed, as a
+  // How much faster a chord's isolated probe reps are than its everyday blended speed, as a
   // fraction of blended speed (0.2 = probes are 20% faster, as a healthy gap should be).
   // null if there is not enough probe data yet to judge. A gap at or below HEALTHY_PROBE_GAP
   // (including negative, i.e. probes no faster or even slower) means complexity is not the
   // real bottleneck for this key - raw chord-formation speed is.
-  function kinematicGap(progress, name) {
-    const stat = progress.keys[name];
+  function kinematicGap(progress, id) {
+    const stat = progress.chords[id];
     if (!stat || !stat.ewmaMs || !stat.probeRecent || stat.probeRecent.length < PROBE_MIN_SAMPLES) return null;
     const probeAvg = stat.probeRecent.reduce((sum, ms) => sum + ms, 0) / stat.probeRecent.length;
     return (stat.ewmaMs - probeAvg) / stat.ewmaMs;
@@ -623,71 +793,47 @@
     return [...new Set([...next, ...restart])].filter(Boolean);
   }
 
-  // 0 (fully accurate) to 1 (always wrong): how much a key's own weakness should pull word
+  // 0 (fully accurate) to 1 (always wrong): how much a chord's own weakness should pull word
   // selection toward it. Deliberately the *raw* accuracy deficit, not `confidence` - confidence
-  // normalizes accuracy against KEY_ACCURACY_TARGET (0.8) and multiplies in a speed term that
+  // normalizes accuracy against CHORD_ACCURACY_TARGET (0.8) and multiplies in a speed term that
   // saturates to 1 almost immediately, which together compress a real, meaningful accuracy
   // problem (e.g. 60% when everything else is 85%+) down to a barely-there signal. Word
-  // selection should react to the actual error rate, not that squashed mastery metric. A key
-  // still inside its new-key grace period (never attempted, or under NEW_KEY_GRACE_SAMPLES
-  // correct reps so far) reads as maximally weak outright, rather than trusting an early
-  // accuracy reading from too few attempts.
-  function keyWeakness(progress, name) {
-    const stat = progress.keys[name];
-    if (!stat || stat.samples < NEW_KEY_GRACE_SAMPLES) return 1;
-    return 1 - keyAccuracy(progress, name);
+  // selection should react to the actual error rate, not that squashed mastery metric. A chord
+  // that has never been typed, or is still inside its grace period (under CHORD_GRACE_SAMPLES
+  // correct reps), reads as UNSEEN_WEAKNESS rather than trusting an early accuracy reading from
+  // too few attempts - unless it is already being missed worse than that.
+  function chordWeakness(progress, id) {
+    const stat = progress.chords[id];
+    if (!stat) return UNSEEN_WEAKNESS;
+    const deficit = 1 - chordAccuracy(progress, id);
+    return stat.samples < CHORD_GRACE_SAMPLES ? Math.max(UNSEEN_WEAKNESS, deficit) : deficit;
   }
 
-  // How much a word's weight should scale up for its single weakest unlocked key - the worst
-  // key present in the stroke, not a product over every key it uses. A chord that happens to
-  // fire several keys at once (many steno briefs do: SKWR, TPH, AO...) must not get a bigger
-  // boost just for using more keys - every real key has *some* nonzero weakness most of the
-  // time, so multiplying a per-key factor across a 4-5 key chord compounds into a huge,
-  // meaningless boost that has nothing to do with any of those keys actually being weak. Using
-  // the max keeps the boost keyed to how bad the worst key in the chord is, independent of how
-  // many keys it has.
-  function weaknessBoost(progress, bits, slotIndex) {
+  // How much a word's weight should scale up for its single weakest chord unit - the worst one
+  // present in its strokes, not a product over every unit. A word with several strokes or
+  // several units must not get a bigger boost just for having more of them: every real chord has
+  // *some* nonzero weakness most of the time, so multiplying across them would compound into a
+  // huge, meaningless boost. Using the max keeps the boost keyed to how bad the worst chord is,
+  // independent of how many there are. `strokes` is a word's stroke masks (one mask also works).
+  function weaknessBoost(progress, strokes, slotIndex) {
     let maxWeak = 0;
-    for (const name of unlockedNames(progress)) {
-      if (!(bits & (1 << slotIndex.get(name)))) continue;
-      maxWeak = Math.max(maxWeak, keyWeakness(progress, name));
-    }
-    return 1 + WEAKNESS_GAIN * maxWeak * maxWeak;
-  }
-
-  // Precomputed bit -> keyWeakness for every unlocked key, built once per pickWords call
-  // rather than once per candidate word. keyWeakness is the same for a given key across every
-  // word in the call, so recomputing it (and the keyAccuracy scan behind it) per word turns a
-  // single pass over the dictionary into a pass that's quadratic in the unlocked key count -
-  // noticeable once a lesson has unlocked more than a handful of keys.
-  function weaknessByBit(progress, slotIndex) {
-    const byBit = new Map();
-    for (const name of unlockedNames(progress)) {
-      byBit.set(1 << slotIndex.get(name), keyWeakness(progress, name));
-    }
-    return byBit;
-  }
-
-  // Same result as `weaknessBoost`, from the precomputed map above, and only walking the bits
-  // actually set in this word's chord rather than every unlocked key.
-  function weaknessBoostFromMap(byBit, bits) {
-    let maxWeak = 0;
-    for (let rest = bits; rest; rest &= rest - 1) {
-      const weak = byBit.get(rest & -rest);
-      if (weak !== undefined && weak > maxWeak) maxWeak = weak;
+    for (const bits of Array.isArray(strokes) ? strokes : [strokes]) {
+      for (const id of unitsOfBits(bits, slotIndex)) maxWeak = Math.max(maxWeak, chordWeakness(progress, id));
     }
     return 1 + WEAKNESS_GAIN * maxWeak * maxWeak;
   }
 
   // Picks words for the stream. Only words with at least one stroke sequence that uses
-  // unlocked keys are eligible. Words touching weaker unlocked keys come up more often (see
+  // unlocked keys are eligible. Words using weaker chords come up more often (see
   // `weaknessBoost`), and words in `avoid` (recently typed) are skipped where possible.
   // `random` returns [0, 1). `options.allowMask`, if given, is used in place of the unlocked
   // mask to decide which words are eligible (but is expected to already be a subset of it) -
-  // this is how an etude pick restricts itself to the focus key plus only already-mastered
+  // this is how an etude pick restricts itself to the focus plus only already-mastered
   // keys. `options.bonusFn`, if given, multiplies a word's weight by `bonusFn(usable)` - this
   // is how a concerto pick rewards words that recombine several recently-unlocked keys
-  // together.
+  // together. `options.requireUnit` only allows words with a spelling that uses that chord
+  // unit, and `options.excludeUnits` (a Set) drops spellings that use any of those units: this
+  // is how a drill works one chord while keeping the rest of the word easy.
   function pickWords(words, progress, slotIndex, options = {}) {
     const random = options.random || Math.random;
     const count = options.count || LESSON_SIZE;
@@ -696,26 +842,53 @@
     const mask = unlockedMask(progress, slotIndex);
     const eligibilityMask = options.allowMask !== undefined ? options.allowMask & mask : mask;
     const bonusFn = options.bonusFn || (() => 1);
+    const { requireUnit, excludeUnits } = options;
+    const unitsFit = (strokes) => {
+      let found = !requireUnit;
+      for (const bits of strokes) {
+        for (const id of unitsOfBits(bits, slotIndex)) {
+          if (excludeUnits && excludeUnits.has(id)) return false;
+          if (id === requireUnit) found = true;
+        }
+      }
+      return found;
+    };
 
     const eligible = [];
     for (const word of words) {
       if (word.text.length > maxLength) continue;
-      const usable = usableVariants(word, eligibilityMask);
+      let usable = usableVariants(word, eligibilityMask);
       if (usable.length === 0) continue;
       if (options.requireMask && !usable.some((variant) => variant.some((b) => b & options.requireMask))) continue;
+      if (requireUnit || excludeUnits) {
+        usable = usable.filter(unitsFit);
+        if (usable.length === 0) continue;
+      }
       eligible.push({ word, usable });
     }
     if (eligible.length === 0) return [];
 
     const pool = eligible.filter(({ word }) => !avoid.has(word.text));
     const source = pool.length >= count || options.strictAvoid ? pool : eligible;
-    const byBit = weaknessByBit(progress, slotIndex);
+    // A chord's weakness is the same across every word in this call, so look it up once.
+    const weakness = new Map();
+    const weakOf = (id) => {
+      let value = weakness.get(id);
+      if (value === undefined) {
+        value = chordWeakness(progress, id);
+        weakness.set(id, value);
+      }
+      return value;
+    };
     const weighted = source.map(({ word, usable }) => {
       // Plover's dictionary has no word frequencies, so combine a real frequency list with
       // the length/stroke heuristics: medium length, one stroke, and actually common words win.
       let weight = lengthWeight(word.text.length) * strokeWeight(usable[0].length) * WordFreq.freqWeight(word.text);
-      const bits = usable[0].reduce((combined, strokeBits) => combined | strokeBits, 0);
-      weight *= weaknessBoostFromMap(byBit, bits);
+      let maxWeak = 0;
+      for (const bits of usable[0]) {
+        for (const id of unitsOfBits(bits, slotIndex)) maxWeak = Math.max(maxWeak, weakOf(id));
+      }
+      weight *= 1 + WEAKNESS_GAIN * maxWeak * maxWeak;
       weight *= bonusFn(usable);
       return { word, weight };
     });
@@ -747,11 +920,11 @@
   }
 
   // Bitmask of unlocked keys at or above `tier` - the "already comfortable" keys an etude
-  // pick is allowed to lean on besides the focus key itself.
+  // pick is allowed to lean on besides the focus itself.
   function masteredMask(progress, slotIndex, tier) {
     let mask = 0;
     for (const name of unlockedNames(progress)) {
-      if (masteryTier(progress, name) >= tier) mask |= 1 << slotIndex.get(name);
+      if (keyTier(progress, name) >= tier) mask |= 1 << slotIndex.get(name);
     }
     return mask;
   }
@@ -767,8 +940,8 @@
   // instead of re-deriving the identical answer (it's a pure function of `progress`, which
   // neither picker mutates) on every word in the batch.
   function bandPickOptions(progress, slotIndex, options) {
-    const focus = focusKey(progress);
-    const gap = focus ? kinematicGap(progress, focus) : null;
+    const focus = focusInfo(progress);
+    const gap = focus ? kinematicGap(progress, focus.id) : null;
     const deficit = gap !== null && gap <= HEALTHY_PROBE_GAP;
     const band = options.forceBand || (deficit ? 'etude' : complexityBand(complexityScore(progress)));
     const pickOptions = { ...options };
@@ -776,8 +949,8 @@
     delete pickOptions.isProbe;
 
     if (band === 'etude' && focus) {
-      const focusBit = 1 << slotIndex.get(focus);
-      pickOptions.allowMask = masteredMask(progress, slotIndex, 1) | focusBit;
+      const focusBits = unitKeys(focus.id).reduce((mask, name) => mask | (1 << slotIndex.get(name)), 0);
+      pickOptions.allowMask = masteredMask(progress, slotIndex, 1) | focusBits;
       pickOptions.maxLength = ETUDE_MAX_LENGTH;
     } else if (band === 'concerto') {
       const recentMask = recentlyUnlockedMask(progress, slotIndex, RECOMBINE_LAST);
@@ -789,52 +962,76 @@
         return 1 + count;
       };
     }
-    return { band, focus, pickOptions };
+    return { band, focus: focus ? focus.id : null, pickOptions };
   }
 
-  // Bitmask of unlocked keys whose recent accuracy sits under DRILL_ACCURACY. Rare keys (-Z, #,
-  // -D) show up in few words, so left to the weighted pick alone they never get enough reps to
-  // lift their accuracy past the unlock bar; this mask feeds a reserved share of drill words.
-  // Only the single worst key is drilled at a time, in short words whose other keys are not
-  // also weak, so a drill word stays easy apart from the one key it is there for.
-  function drillOptions(progress, slotIndex) {
+  // The chord a drill word works, and how much of the stream it gets. Rare combinations (-Z,
+  // #, -D, or a compound like T-P-H-) show up in few words, so left to the weighted pick alone
+  // they never get enough reps to lift their accuracy past the unlock bar; this reserves a
+  // share of words for the single worst chord, in short words whose other chords are not also
+  // being failed, so a drill word stays easy apart from the one chord it is there for. With
+  // nothing under DRILL_ACCURACY the drill does not stop: it works the practiced chord with the
+  // lowest confidence (accuracy and speed together), at a smaller share, so there is always a
+  // weak spot being worked at every level. null before any chord has enough attempts to judge.
+  function drillOptions(progress) {
+    const weak = weakChordIds(progress);
     let target = null;
-    let worst = DRILL_ACCURACY;
-    let weakBits = 0;
-    for (const name of unlockedNames(progress)) {
-      const stat = progress.keys[name];
-      if (!stat || stat.recent.length < KEY_ACCURACY_MIN_SAMPLES) continue;
-      const accuracy = keyAccuracy(progress, name);
-      if (accuracy >= DRILL_ACCURACY) continue;
-      weakBits |= 1 << slotIndex.get(name);
-      if (accuracy < worst) {
-        worst = accuracy;
-        target = name;
+    let steady = false;
+    if (weak.length > 0) {
+      target = weak.reduce((worst, id) => (chordAccuracy(progress, id) < chordAccuracy(progress, worst) ? id : worst));
+    } else {
+      let lowest = Infinity;
+      for (const id of Object.keys(progress.chords)) {
+        if (progress.chords[id].recent.length < CHORD_ACCURACY_MIN_SAMPLES) continue;
+        const score = confidence(progress, id);
+        if (score < lowest) {
+          lowest = score;
+          target = id;
+        }
       }
+      steady = true;
     }
     if (!target) return null;
-    const targetBit = 1 << slotIndex.get(target);
     return {
-      requireMask: targetBit,
-      allowMask: unlockedMask(progress, slotIndex) & ~(weakBits & ~targetBit),
-      maxLength: ETUDE_MAX_LENGTH,
+      share: steady ? STEADY_DRILL_SHARE : DRILL_SHARE,
+      target,
+      options: {
+        requireUnit: target,
+        excludeUnits: new Set(weak.filter((id) => id !== target)),
+        maxLength: ETUDE_MAX_LENGTH,
+      },
     };
   }
 
+  // One drill word, short first and any length if no short word has the chord. [] if none.
+  function pickDrill(words, progress, slotIndex, options, drill, count) {
+    const picked = pickWords(words, progress, slotIndex, { ...options, ...drill.options, count });
+    if (picked.length >= count) return picked;
+    const longer = pickWords(words, progress, slotIndex, {
+      ...options,
+      ...drill.options,
+      maxLength: options.maxLength,
+      avoid: [...(options.avoid || []), ...picked.map((word) => word.text)],
+      strictAvoid: true,
+      count: count - picked.length,
+    });
+    return [...picked, ...longer];
+  }
+
   // One word, chosen for the live complexity band: 'etude' (isolated, minimal-load reps on
-  // the focus key), 'study' (today's normal picking, unchanged), or 'concerto' (full-length
+  // the focus), 'study' (today's normal picking, unchanged), or 'concerto' (full-length
   // words that deliberately recombine several recently-unlocked keys). The band is read from
   // `complexityScore` fresh every call, so it can move word to word, not just at a boundary -
   // unless `options.forceBand` overrides it (used for scheduled diagnostic probes) or a
-  // `kinematicGap` deficit on the focus key forces 'etude' regardless of its confidence score,
-  // because a key whose isolated reps are not substantially faster than its blended reps is
+  // `kinematicGap` deficit on the focus forces 'etude' regardless of its confidence score,
+  // because a chord whose isolated reps are not substantially faster than its blended reps is
   // not actually being held back by word complexity.
   function nextWord(words, progress, slotIndex, options = {}) {
     const { band, focus, pickOptions } = bandPickOptions(progress, slotIndex, options);
     let picked;
-    const drill = options.forceBand ? null : drillOptions(progress, slotIndex);
-    if (drill && (options.random || Math.random)() < DRILL_SHARE) {
-      picked = pickWords(words, progress, slotIndex, { ...options, ...drill, count: 1 })[0];
+    const drill = options.forceBand ? null : drillOptions(progress);
+    if (drill && (options.random || Math.random)() < drill.share) {
+      picked = pickDrill(words, progress, slotIndex, options, drill, 1)[0];
     }
     // strictAvoid: a band whose few eligible words were all just typed must not hand back the
     // same word again - it falls through to the plain pick instead.
@@ -850,7 +1047,7 @@
     }
     if (!picked) picked = pickWords(words, progress, slotIndex, { ...options, count: 1 })[0];
     if (!picked) return null;
-    return { ...picked, band, isProbe: Boolean(options.isProbe), focusKeyAtPick: focus };
+    return { ...picked, band, isProbe: Boolean(options.isProbe), focusChordAtPick: focus };
   }
 
   // `count` words for the live band in one pass, for a caller that needs several at once (the
@@ -860,9 +1057,9 @@
   // (the band, the mask, `progress` itself) changes between them.
   function nextWords(words, progress, slotIndex, count, options = {}) {
     const { band, focus, pickOptions } = bandPickOptions(progress, slotIndex, options);
-    const drill = options.forceBand ? null : drillOptions(progress, slotIndex);
-    const drillCount = drill ? Math.round(count * DRILL_SHARE) : 0;
-    const picked = drillCount ? pickWords(words, progress, slotIndex, { ...options, ...drill, count: drillCount }) : [];
+    const drill = options.forceBand ? null : drillOptions(progress);
+    const drillCount = drill ? Math.round(count * drill.share) : 0;
+    const picked = drillCount ? pickDrill(words, progress, slotIndex, options, drill, drillCount) : [];
     const normal = pickWords(words, progress, slotIndex, {
       ...pickOptions,
       avoid: [...(options.avoid || []), ...picked.map((word) => word.text)],
@@ -877,7 +1074,7 @@
       const rest = pickWords(words, progress, slotIndex, { ...options, avoid, count: count - picked.length });
       picked.push(...rest);
     }
-    return picked.map((word) => ({ ...word, band, isProbe: Boolean(options.isProbe), focusKeyAtPick: focus }));
+    return picked.map((word) => ({ ...word, band, isProbe: Boolean(options.isProbe), focusChordAtPick: focus }));
   }
 
   // Whether loading `incoming` in place of `current` would erase real progress. totalTyped
@@ -894,27 +1091,40 @@
     nextOptions,
     LESSON_SIZE,
     ACCURACY_TARGET,
-    KEY_ACCURACY_TARGET,
+    CHORD_ACCURACY_TARGET,
+    DRILL_ACCURACY,
+    DRILL_SHARE,
+    STEADY_DRILL_SHARE,
+    UNSEEN_WEAKNESS,
+    drillOptions,
     TARGET_MS,
     ETUDE_MAX,
     CONCERTO_MIN,
     PROBE_WINDOW,
     HEALTHY_PROBE_GAP,
     WEAKNESS_GAIN,
-    NEW_KEY_GRACE_SAMPLES,
+    CHORD_GRACE_SAMPLES,
     emptyProgress,
     normalize,
     unlockedNames,
+    chordUnits,
+    unitKeys,
+    isChordId,
     recordChord,
+    recordStroke,
     recordWord,
     recordProbe,
     windowStats,
     scoreFor,
-    keyAccuracy,
+    chordAccuracy,
+    weakChords,
+    chordsWithKey,
+    keyConfidence,
+    keyTier,
     canUnlock,
     wpmTarget,
     confidence,
-    keyWeakness,
+    chordWeakness,
     weaknessBoost,
     masteryTier,
     scaffoldTier,
@@ -929,7 +1139,7 @@
     kinematicGap,
     unlockIfReady,
     recordLesson,
-    focusKey,
+    focusChord,
     unlockedMask,
     usableVariants,
     displayVariants,

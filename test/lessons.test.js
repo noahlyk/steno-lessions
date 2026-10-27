@@ -37,21 +37,28 @@ test('normalize keeps good fields and drops damaged ones', () => {
   assert.deepEqual(lessons.normalize('nonsense'), lessons.emptyProgress());
   const progress = lessons.normalize({
     unlocked: 999,
-    keys: { 'A-': { samples: 2, ewmaMs: 900, misses: 1 }, NOPE: { samples: 9 } },
+    chords: {
+      'A-': { samples: 2, ewmaMs: 900, misses: 1 },
+      'T-+P-+H-': { samples: 4, ewmaMs: 700, misses: 0 },
+      NOPE: { samples: 9 },
+      'P-+T-': { samples: 9 },
+      'T-+-T': { samples: 9 },
+    },
     words: [{ ms: 800, strokes: 2, misses: 0 }, { ms: 'x' }],
   });
   assert.equal(progress.unlocked, lessons.KEY_ORDER.length);
-  assert.deepEqual(progress.keys['A-'], { samples: 2, ewmaMs: 900, misses: 1, recent: [], probeRecent: [] });
-  assert.equal(progress.keys.NOPE, undefined);
+  assert.deepEqual(progress.chords['A-'], { samples: 2, ewmaMs: 900, misses: 1, recent: [], probeRecent: [] });
+  assert.equal(progress.chords['T-+P-+H-'].samples, 4, 'a compound chord is kept');
+  assert.deepEqual(Object.keys(progress.chords).sort(), ['A-', 'T-+P-+H-'], 'junk, out-of-order and mixed-hand ids are dropped');
   assert.deepEqual(progress.words, [{ ms: 800, strokes: 2, misses: 0 }]);
 });
 
 test('a miss slows a key down rather than counting as a sample', () => {
   const progress = lessons.emptyProgress();
   lessons.recordChord(progress, ['T-'], 500, false);
-  assert.equal(progress.keys['T-'].samples, 0);
-  assert.equal(progress.keys['T-'].misses, 1);
-  assert.ok(progress.keys['T-'].ewmaMs > 500);
+  assert.equal(progress.chords['T-'].samples, 0);
+  assert.equal(progress.chords['T-'].misses, 1);
+  assert.ok(progress.chords['T-'].ewmaMs > 500);
 });
 
 test('the words-per-minute target is 28 on every level', () => {
@@ -88,7 +95,7 @@ test('a key with poor accuracy of its own blocks unlock even if the overall wind
   // but the key itself has failed more than it has succeeded.
   for (let i = 0; i < 9; i++) lessons.recordChord(progress, ['T-'], 500, false);
   lessons.recordChord(progress, ['T-'], 500, true);
-  assert.equal(lessons.keyAccuracy(progress, 'T-') < lessons.KEY_ACCURACY_TARGET, true);
+  assert.equal(lessons.chordAccuracy(progress, 'T-') < lessons.CHORD_ACCURACY_TARGET, true);
   assert.equal(lessons.canUnlock(progress), false);
 });
 
@@ -100,7 +107,7 @@ test('a rough patch on a key fades out once it is typed well consistently, unlik
   // Keep typing T- correctly: its recency-weighted accuracy should recover and stop
   // permanently blocking every future unlock, the way a lifetime average would.
   for (let i = 0; i < 40; i++) lessons.recordChord(progress, ['T-'], 500, true);
-  assert.equal(lessons.keyAccuracy(progress, 'T-') >= lessons.KEY_ACCURACY_TARGET, true);
+  assert.equal(lessons.chordAccuracy(progress, 'T-') >= lessons.CHORD_ACCURACY_TARGET, true);
   assert.equal(lessons.canUnlock(progress), true);
 });
 
@@ -143,16 +150,16 @@ test('startLesson returns up to LESSON_SIZE words', () => {
   assert.ok(lesson.length > 0 && lesson.length <= lessons.LESSON_SIZE);
 });
 
-test('focusKey is the unlocked key that needs the most practice', () => {
+test('focusChord is the unlocked key that needs the most practice', () => {
   const progress = lessons.emptyProgress();
   for (const name of lessons.unlockedNames(progress)) {
     for (let i = 0; i < 6; i++) lessons.recordChord(progress, [name], 600, true);
   }
   lessons.recordChord(progress, ['S-'], 5000, false);
-  assert.equal(lessons.focusKey(progress), 'S-');
+  assert.equal(lessons.focusChord(progress), 'S-');
 });
 
-test('focusKey picks a key that is fast but often wrong over one that is merely slower', () => {
+test('focusChord picks a key that is fast but often wrong over one that is merely slower', () => {
   const progress = lessons.emptyProgress();
   for (const name of lessons.unlockedNames(progress)) {
     for (let i = 0; i < 6; i++) lessons.recordChord(progress, [name], 600, true);
@@ -161,8 +168,8 @@ test('focusKey picks a key that is fast but often wrong over one that is merely 
   // its own accuracy sits below the unlock gate: this is the real thing blocking unlock,
   // not a key that is merely a bit slower than the others.
   for (let i = 0; i < 10; i++) lessons.recordChord(progress, ['S-'], 400, i % 3 !== 0);
-  assert.equal(lessons.keyAccuracy(progress, 'S-') < lessons.KEY_ACCURACY_TARGET, true);
-  assert.equal(lessons.focusKey(progress), 'S-');
+  assert.equal(lessons.chordAccuracy(progress, 'S-') < lessons.CHORD_ACCURACY_TARGET, true);
+  assert.equal(lessons.focusChord(progress), 'S-');
 });
 
 test('pickWords only uses words with a stroke made from unlocked keys', () => {
@@ -226,14 +233,20 @@ test('pickWords skips recently typed words when it can', () => {
   assert.ok(!picked.some((word) => avoid.includes(word.text)));
 });
 
-test('keyWeakness treats an unattempted key as fully weak, and a freshly-unlocked key as fully weak during its grace period even if confidence already reads high', () => {
+test('chordWeakness treats an unseen chord as unknown, not failed, and keeps a young chord there during its grace period even if confidence already reads high', () => {
   const progress = lessons.emptyProgress();
-  assert.equal(lessons.keyWeakness(progress, 'A-'), 1, 'never attempted');
+  assert.equal(lessons.chordWeakness(progress, 'A-'), lessons.UNSEEN_WEAKNESS, 'never attempted');
   for (let i = 0; i < 5; i++) lessons.recordChord(progress, ['A-'], 400, true);
   assert.ok(lessons.confidence(progress, 'A-') > 0.9, 'confidence alone already reads as high');
-  assert.equal(lessons.keyWeakness(progress, 'A-'), 1, 'still within its grace period');
-  for (let i = 0; i < lessons.NEW_KEY_GRACE_SAMPLES; i++) lessons.recordChord(progress, ['A-'], 400, true);
-  assert.ok(lessons.keyWeakness(progress, 'A-') < 1, 'grace period has elapsed, real confidence now counts');
+  assert.equal(lessons.chordWeakness(progress, 'A-'), lessons.UNSEEN_WEAKNESS, 'still within its grace period');
+  for (let i = 0; i < lessons.CHORD_GRACE_SAMPLES; i++) lessons.recordChord(progress, ['A-'], 400, true);
+  assert.equal(lessons.chordWeakness(progress, 'A-'), 0, 'grace period has elapsed, real accuracy now counts');
+});
+
+test('a young chord that is already being missed reads as weaker than an unseen one', () => {
+  const progress = lessons.emptyProgress();
+  for (let i = 0; i < 6; i++) lessons.recordChord(progress, ['T-+P-+H-'], 500, i % 2 === 0);
+  assert.ok(lessons.chordWeakness(progress, 'T-+P-+H-') > lessons.UNSEEN_WEAKNESS);
 });
 
 test('pickWords weighs every unlocked key\'s own weakness, not just a single focus key', () => {
@@ -253,16 +266,16 @@ test('pickWords weighs every unlocked key\'s own weakness, not just a single foc
   assert.equal(picked[0].text, 'zzzz', 'the word touching the still-unknown key should win the tie');
 });
 
-test('keyWeakness reacts to the raw accuracy deficit, not the target-normalized/speed-coupled confidence metric', () => {
+test('chordWeakness reacts to the raw accuracy deficit, not the target-normalized/speed-coupled confidence metric', () => {
   const progress = lessons.emptyProgress();
   // 18 correct, 12 wrong, well past the grace period - a key reading as 60% recently accurate
   // while comfortably fast, mirroring a real "struggling but not catastrophic" key. confidence
-  // would read this as 0.75 (accuracy capped at accuracy/KEY_ACCURACY_TARGET); keyWeakness
+  // would read this as 0.75 (accuracy capped at accuracy/CHORD_ACCURACY_TARGET); chordWeakness
   // should read the real 40% error rate instead.
   for (let i = 0; i < 30; i++) lessons.recordChord(progress, ['-F'], 400, i % 5 !== 0 && i % 5 !== 1);
-  assert.equal(lessons.keyAccuracy(progress, '-F'), 0.6);
+  assert.equal(lessons.chordAccuracy(progress, '-F'), 0.6);
   assert.ok(lessons.confidence(progress, '-F') > 0.7, 'confidence alone reads this as much healthier than it is');
-  assert.equal(lessons.keyWeakness(progress, '-F'), 0.4);
+  assert.equal(lessons.chordWeakness(progress, '-F'), 0.4);
 });
 
 test('a key at 60% accuracy pulls meaningfully more word-selection weight than one at 90%+, not just a token amount', () => {
@@ -279,34 +292,32 @@ test('a key at 60% accuracy pulls meaningfully more word-selection weight than o
   assert.equal(picked[0].text, 'zzzz', 'the clearly-weaker key should win the tie, not just edge it out');
 });
 
-test('weaknessBoost is keyed to a chord\'s single weakest key, not a product that compounds with how many keys it uses', () => {
+test('weaknessBoost is keyed to a word\'s single weakest chord, not a product that compounds with how many chords it uses', () => {
   const progress = lessons.emptyProgress();
   progress.unlocked = lessons.KEY_ORDER.length;
-  // -F is weak (60%); every other key here is comfortably solid (90%+). A real steno brief
-  // commonly fires several keys in one stroke (e.g. SKWR, TPH) - none of those extra keys
-  // being merely "pretty good" should multiply the boost up just because there are more of
-  // them, the way a product-over-every-key formula did (that's what caused common multi-key
-  // briefs to flood the stream with no actual relevance to any weak key).
+  // -F is weak (60%); every other chord here is comfortably solid (90%+). A real word often
+  // has several chords across its strokes - none of those extra solid chords being merely
+  // "pretty good" should multiply the boost up just because there are more of them, which is
+  // what a product-over-every-chord formula did (it flooded the stream with words that had
+  // no actual relevance to any weak chord).
   for (let i = 0; i < 30; i++) lessons.recordChord(progress, ['-F'], 400, i % 5 !== 0 && i % 5 !== 1); // 60%
-  for (const name of ['S-', 'K-', 'W-', 'R-']) {
-    for (let i = 0; i < 30; i++) lessons.recordChord(progress, [name], 400, i !== 0 && i !== 1 && i !== 2); // 90%
+  for (const id of ['S-', 'K-+W-+R-', 'A-', '-T', 'T-']) {
+    for (let i = 0; i < 30; i++) lessons.recordChord(progress, [id], 400, i !== 0 && i !== 1 && i !== 2); // 90%
   }
-  const soloWeak = 1 << slotIndex.get('-F');
-  const weakPlusManySolid = [soloWeak, 'S-', 'K-', 'W-', 'R-'].reduce(
-    (bits, name) => (typeof name === 'number' ? bits | name : bits | (1 << slotIndex.get(name))),
-    0,
-  );
-  const manySolidOnly = ['S-', 'K-', 'W-', 'R-'].reduce((bits, name) => bits | (1 << slotIndex.get(name)), 0);
-  const oneSolidOnly = 1 << slotIndex.get('S-');
+  const bits = (...names) => names.reduce((mask, name) => mask | (1 << slotIndex.get(name)), 0);
+  const weakAlone = bits('-F');
+  const weakAmongSolid = [bits('S-', 'A-', '-F'), bits('K-', 'W-', 'R-', '-T'), bits('T-')];
   assert.equal(
-    lessons.weaknessBoost(progress, weakPlusManySolid, slotIndex),
-    lessons.weaknessBoost(progress, soloWeak, slotIndex),
-    'adding several solid keys alongside the one weak key must not change its boost',
+    lessons.weaknessBoost(progress, weakAmongSolid, slotIndex),
+    lessons.weaknessBoost(progress, weakAlone, slotIndex),
+    'adding several solid chords alongside the one weak chord must not change its boost',
   );
+  const solidAlone = [bits('S-')];
+  const manySolid = [bits('S-', 'A-'), bits('K-', 'W-', 'R-', '-T'), bits('T-')];
   assert.equal(
-    lessons.weaknessBoost(progress, manySolidOnly, slotIndex),
-    lessons.weaknessBoost(progress, oneSolidOnly, slotIndex),
-    'four equally-solid keys together must not compound into a bigger boost than just one of them alone',
+    lessons.weaknessBoost(progress, manySolid, slotIndex),
+    lessons.weaknessBoost(progress, solidAlone, slotIndex),
+    'several equally-solid chords together must not compound into a bigger boost than one alone',
   );
 });
 
@@ -326,7 +337,7 @@ test('nextWord in the etude band only uses the focus key plus already-mastered k
     if (name === 'S-') continue;
     for (let i = 0; i < 30; i++) lessons.recordChord(progress, [name], 500, true);
   }
-  assert.equal(lessons.focusKey(progress), 'S-');
+  assert.equal(lessons.focusChord(progress), 'S-');
   const word = lessons.nextWord(words, progress, slotIndex, { random: () => 0.2 });
   assert.equal(word.band, 'etude');
   assert.ok(word.text.length <= 3, `${word.text} should be short in the etude band`);
@@ -405,12 +416,12 @@ test('switchLevel starts the new level fresh and restores the old one when you r
   assert.equal(lessons.switchLevel(progress, 2), true);
   assert.equal(progress.level, 2);
   assert.equal(progress.unlocked, lessons.START_KEYS);
-  assert.deepEqual(progress.keys, {});
+  assert.deepEqual(progress.chords, {});
   progress.unlocked = 8;
   assert.equal(lessons.switchLevel(progress, 2), false, 'already there');
   assert.equal(lessons.switchLevel(progress, 1), true);
   assert.equal(progress.unlocked, 12);
-  assert.equal(progress.keys['T-'].samples, 1);
+  assert.equal(progress.chords['T-'].samples, 1);
   assert.equal(lessons.switchLevel(progress, 2), true);
   assert.equal(progress.unlocked, 8, 'level 2 progress was kept too');
 });
@@ -567,7 +578,7 @@ test('scaffoldTier is the minimum mastery tier across every unlocked key', () =>
   }
   assert.equal(lessons.scaffoldTier(progress), 2);
   // One under-practiced key holds the whole fade back, even though every other key is sustained.
-  progress.keys['S-'] = { samples: 1, ewmaMs: 2000, misses: 0, recent: [], probeRecent: [] };
+  progress.chords['S-'] = { samples: 1, ewmaMs: 2000, misses: 0, recent: [], probeRecent: [] };
   assert.equal(lessons.masteryTier(progress, 'S-'), 0);
   assert.equal(lessons.scaffoldTier(progress), 0);
 });
@@ -600,7 +611,7 @@ test('all three levels keep separate progress through any order of switching and
   for (const [level, unlocked] of [[2, 10], [1, 20], [3, 7], [1, 20], [2, 10]]) {
     lessons.switchLevel(progress, level);
     assert.equal(progress.unlocked, unlocked, `level ${level} unlocked`);
-    assert.equal(progress.keys['T-'].samples, 1, `level ${level} stats`);
+    assert.equal(progress.chords['T-'].samples, 1, `level ${level} stats`);
   }
 });
 
@@ -612,12 +623,14 @@ test('pickWords requireMask only returns words that use a masked key', () => {
   for (const word of picked) assert.ok(['cat', 'at'].includes(word.text), word.text);
 });
 
-test('nextWord drills a key stuck below the accuracy bar', () => {
+test('nextWord drills a chord stuck below the accuracy bar', () => {
   const progress = lessons.emptyProgress();
   progress.unlocked = 6;
   for (const name of lessons.KEY_ORDER.slice(0, 6)) {
     for (let i = 0; i < 40; i++) lessons.recordChord(progress, [name], 300, name === '-T' ? i % 3 !== 0 : true);
   }
+  // STK is one chord (S-T-K-), so it has to have been practiced for the comparison to be fair.
+  for (let i = 0; i < 40; i++) lessons.recordChord(progress, ['S-+T-+K-'], 300, true);
   let hits = 0;
   for (let i = 0; i < 200; i++) {
     if (['cat', 'at'].includes(lessons.nextWord(words, progress, slotIndex).text)) hits++;
