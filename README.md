@@ -72,7 +72,7 @@ If the board is unplugged mid-lesson the page says so and carries on on the keyb
 
 - A stroke is a chord. Hold every key for it at once, then release them all. The stroke is scored when the last key comes up, so the keys can land in any order.
 - Each word has its sounds and keys directly under it, as parallel lines: the words, then the sounds to listen for, then the keys to press. Sounds are coloured by where their key is: left-hand orange, vowels and star blue, right-hand purple. Their sounds turn green while their keys are held. A key the stroke does not use appears in red after the sounds.
-- Key hints (checkbox at the top) hides the keys line and the key names, so you type from the sounds alone. The layout stays the same. The setting is remembered in this browser.
+- Key hints (in the Assists menu at the top) hides the keys line and the key names, so you type from the sounds alone. The layout stays the same. The setting is remembered in this browser.
 - Key names follow traditional steno. Left-side keys have no dash (`S`, `T`, `K`), and right-side keys take one (`-S`, `-T`, `-R`). A letter with only one key has no dash, like the vowels (`A`, `O`, `E`, `U`) and `-F`.
 - Any stroke Plover maps to the word counts. For example, `and` can be typed as `STK` or `-PB`.
 - A wrong chord stays on screen in red. The message lists every stroke the word could need next, one per spelling, and says which keys you pressed. The word waits until one of them is typed right. Strokes you already got right are kept.

@@ -1025,6 +1025,7 @@
     renderStream();
     renderKeyboard();
     renderHud();
+    updateAssistsCount();
   }
 
   // The server (public/api) is one way to run this app; a static host with no server, such
@@ -1455,7 +1456,37 @@
     return body;
   }
 
+  // The Assists popover on the nav: all the helper switches behind one button, with a count
+  // of how many are on. Closes on an outside click or Escape. The switches keep their ids, so
+  // the rest of the page reads and sets them exactly as before.
+  const ASSIST_IDS = ['hints', 'show-labels', 'show-target', 'show-keyboard'];
+  function updateAssistsCount() {
+    const on = ASSIST_IDS.filter((id) => $(id).checked).length;
+    $('assists-count').textContent = `${on}/${ASSIST_IDS.length}`;
+  }
+  function setupAssists() {
+    const button = $('assists-btn');
+    const panel = $('assists-panel');
+    const setOpen = (open) => {
+      panel.hidden = !open;
+      button.setAttribute('aria-expanded', String(open));
+    };
+    button.addEventListener('click', () => setOpen(panel.hidden));
+    document.addEventListener('click', (event) => {
+      if (!panel.hidden && !$('assists').contains(event.target)) setOpen(false);
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !panel.hidden) {
+        setOpen(false);
+        button.focus();
+      }
+    });
+    panel.addEventListener('change', updateAssistsCount);
+    updateAssistsCount();
+  }
+
   async function init() {
+    setupAssists();
     // The keyboard-diagram picker: QWERTY or the Uni v4. A pure render switch - no reload,
     // no data change, so it can move freely mid-lesson. Wired before the data load so it
     // keeps working even when the bundle fails to load.

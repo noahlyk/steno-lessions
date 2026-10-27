@@ -20,13 +20,35 @@
       </label>
       <span class="metrics" id="metrics"></span>
       <span class="lesson-note" id="lesson-note"></span>
-      <label class="toggle"><input type="checkbox" id="hints"> Key hints</label>
-      <label class="toggle" title="On by default. Uncheck to let it fade away automatically once every key is sustained - least consequential to remove"><input type="checkbox" id="show-labels"> Stroke labels</label>
-      <label class="toggle" title="On by default. Uncheck to let it fade away automatically once every key is sustained"><input type="checkbox" id="show-target"> Target highlight</label>
-      <label class="toggle" title="On by default. Uncheck to let it fade away automatically once every key is sustained - most consequential to remove"><input type="checkbox" id="show-keyboard"> Keyboard diagram</label>
-      <label class="theory-picker" title="Which keyboard diagram to show. Typing works on either - QWERTY keys always, and the Uni v4 once connected.">Keyboard
-        <select id="kbd-picker"><option value="qwerty">QWERTY</option><option value="uni">Uni v4</option></select>
-      </label>
+      <div class="assists" id="assists">
+        <button type="button" class="nav-btn" id="assists-btn" aria-haspopup="true" aria-expanded="false" aria-controls="assists-panel">
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2 4h7M13 4h1M2 8h2M8 8h6M2 12h8M14 12h0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/><circle cx="11" cy="4" r="1.6" fill="currentColor"/><circle cx="6" cy="8" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg>
+          Assists <span class="badge" id="assists-count"></span>
+        </button>
+        <div class="assists-panel" id="assists-panel" role="group" aria-label="Assists" hidden>
+          <label class="switch" title="Key names on the keyboard and the keys to press. Off leaves only the sounds.">
+            <input type="checkbox" id="hints"><span class="track"></span>
+            <span class="switch-text">Key hints<small>Key names and the keys to press</small></span>
+          </label>
+          <label class="switch" title="On by default. Turn off to let it fade away automatically once every key is sustained - least consequential to remove">
+            <input type="checkbox" id="show-labels"><span class="track"></span>
+            <span class="switch-text">Stroke labels<small>Sounds under each word</small></span>
+          </label>
+          <label class="switch" title="On by default. Turn off to let it fade away automatically once every key is sustained">
+            <input type="checkbox" id="show-target"><span class="track"></span>
+            <span class="switch-text">Target highlight<small>Lights the keys you need next</small></span>
+          </label>
+          <label class="switch" title="On by default. Turn off to let it fade away automatically once every key is sustained - most consequential to remove">
+            <input type="checkbox" id="show-keyboard"><span class="track"></span>
+            <span class="switch-text">Keyboard diagram<small>Shows the board while you type</small></span>
+          </label>
+          <div class="assists-sep"></div>
+          <label class="assists-select" title="Which keyboard diagram to show. Typing works on either - QWERTY keys always, and the Uni v4 once connected.">
+            <span>Diagram</span>
+            <select id="kbd-picker"><option value="qwerty">QWERTY</option><option value="uni">Uni v4</option></select>
+          </label>
+        </div>
+      </div>
     </div>
     <ul class="hud-row key-chips" id="key-chips"></ul>
     <div class="hud-row hud-line" id="unlock-status"></div>
