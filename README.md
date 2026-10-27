@@ -104,6 +104,10 @@ A stroke is made of up to four chords: the number bar, the left-hand initials, t
 - **The key chips** are read-only summaries. Hover one to see the chords it appears in, weakest first. The Focus line under them names the chord to work on and any others that are weak.
 - Saves from before this change tracked accuracy per key. Those numbers mix every stroke a key was part of, so they can't be split back into chords and are dropped when the save loads. Your unlocked keys and word history are kept.
 
+## A word plus a suffix
+
+A word is also accepted as another word followed by a suffix stroke, the way Plover writes it, even when the dictionary only lists the word as one outline. `filming` is listed as `TPEUL/-PLG`, and `TPEUPL/-G` (film, then `{^ing}`) works too. Spelling changes are handled (`make` + `-G` is `making`, `stop` + `-G` is `stopping`), a stem needs at least three letters, and a spelling is never longer than three strokes. Only words already in the list gain spellings, and which words you are given is unchanged: these only widen what counts as right. The suffix strokes live in `public/data/suffixes.json` (Plover's is made by `node scripts/build-suffixes.js`; Lapwing's by `scripts/build-theory.js`). Prefixes are not covered yet.
+
 ## Limitations
 
 - The word list is every plain lowercase word in the dictionary, weighted by length, stroke count, and a bundled common-word frequency list (`public/lib/word-frequency.js`).

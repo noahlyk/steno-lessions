@@ -133,6 +133,100 @@
       .sort((a, b) => a.text.localeCompare(b.text));
   }
 
+  // The single-stroke suffixes in a Plover-style dictionary ({^ing} on -G, {^s} on -S ...), as
+  // { text: [notation, ...] } with the simplest strokes first. buildWords drops these entries
+  // (they are not words), so they are kept here for suffixComposer.
+  const MAX_SUFFIX_STROKES = 4;
+  function buildSuffixes(entries) {
+    const found = new Map();
+    for (const [key, text] of entries) {
+      const match = typeof text === 'string' ? /^\{\^([a-z]{1,8})\}$/.exec(text) : null;
+      if (!match || key.includes('/')) continue;
+      const bits = parseStroke(key);
+      if (bits === null) continue;
+      if (!found.has(match[1])) found.set(match[1], []);
+      found.get(match[1]).push({ key, keys: popcount(bits) });
+    }
+    const suffixes = {};
+    for (const [text, strokes] of [...found].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
+      strokes.sort((a, b) => a.keys - b.keys || (a.key < b.key ? -1 : 1));
+      suffixes[text] = strokes.slice(0, MAX_SUFFIX_STROKES).map((stroke) => stroke.key);
+    }
+    return suffixes;
+  }
+
+  // The words a word could be built from by adding `suffix`: the text without it, with the usual
+  // spelling changes undone (make+ing = making, stop+ing = stopping, carry+es = carries).
+  function stemCandidates(text, suffix) {
+    const base = text.slice(0, text.length - suffix.length);
+    const stems = [base];
+    if (/^[aeiouy]/.test(suffix)) {
+      stems.push(`${base}e`);
+      if (base.length > 1 && base[base.length - 1] === base[base.length - 2]) stems.push(base.slice(0, -1));
+    }
+    if (base.endsWith('i')) stems.push(`${base.slice(0, -1)}y`);
+    return stems.filter((stem) => stem.length >= 3);
+  }
+
+  // A word is also typed as another word plus a suffix stroke: filming is film (TPEUPL) then
+  // {^ing} (-G), as Plover itself writes it, even when the dictionary only lists filming as a
+  // whole-word outline. `suffixComposer` returns a function that adds those spellings to one
+  // word's `variants`, after the ones the dictionary has (once per word; calling it again does
+  // nothing). Doing it a word at a time, when the word is about to be typed, costs nothing at
+  // startup, and it leaves word choice alone: words are still picked by their dictionary
+  // spellings, these only widen what is accepted. Only words already in the list gain spellings,
+  // a spelling never goes over MAX_STROKES, and a word takes at most MAX_COMPOSED of them
+  // (fewest strokes, then keys).
+  const MAX_COMPOSED = 6;
+  function suffixComposer(words, suffixes) {
+    const byText = new Map(words.map((word) => [word.text, word]));
+    // Bucketed by last letter, so a word is only compared against the few suffixes that could end it.
+    const byLastLetter = new Map();
+    for (const [text, notations] of Object.entries(suffixes || {})) {
+      const strokes = notations.map(parseStroke).filter((bits) => bits !== null);
+      if (strokes.length === 0) continue;
+      const last = text[text.length - 1];
+      if (!byLastLetter.has(last)) byLastLetter.set(last, []);
+      byLastLetter.get(last).push([text, strokes]);
+    }
+    const done = new WeakSet();
+    const keyCount = (strokes) => strokes.reduce((total, bits) => total + popcount(bits), 0);
+    return function compose(word) {
+      if (done.has(word)) return word;
+      done.add(word);
+      const list = word.isNumber ? null : byLastLetter.get(word.text[word.text.length - 1]);
+      if (!list) return word;
+      const seen = new Set(word.variants.map((strokes) => strokes.join(',')));
+      const added = [];
+      for (const [suffix, suffixStrokes] of list) {
+        if (word.text.length <= suffix.length || !word.text.endsWith(suffix)) continue;
+        for (const stemText of stemCandidates(word.text, suffix)) {
+          const stem = byText.get(stemText);
+          if (!stem || stem === word) continue;
+          for (const stemStrokes of stem.variants.slice(0, 2)) {
+            for (const suffixBits of suffixStrokes) {
+              const strokes = [...stemStrokes, suffixBits];
+              const id = strokes.join(',');
+              if (strokes.length > MAX_STROKES || seen.has(id)) continue;
+              seen.add(id);
+              added.push(strokes);
+            }
+          }
+        }
+      }
+      added.sort((a, b) => a.length - b.length || keyCount(a) - keyCount(b));
+      word.variants = word.variants.concat(added.slice(0, MAX_COMPOSED));
+      return word;
+    };
+  }
+
+  // Every word at once, for tests and tools.
+  function addSuffixVariants(words, suffixes) {
+    const compose = suffixComposer(words, suffixes);
+    words.forEach(compose);
+    return words;
+  }
+
   // With the number key (#) held, these keys type digits instead of letters. Listed in steno
   // order, which is also the order digits come out of a single stroke.
   const DIGIT_KEYS = [['S-', '1'], ['T-', '2'], ['P-', '3'], ['H-', '4'], ['A-', '5'], ['O-', '0'],
@@ -227,7 +321,7 @@
   }
 
   return {
-    SLOTS, parseStroke, parseLayout, namesInBits, displayOrder, buildWords, buildNumberWords, popcount, renderStroke, displayStroke, displayName,
+    SLOTS, parseStroke, parseLayout, namesInBits, displayOrder, buildWords, buildSuffixes, suffixComposer, addSuffixVariants, buildNumberWords, popcount, renderStroke, displayStroke, displayName,
     keyGroup, keyPair,
   };
 });

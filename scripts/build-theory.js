@@ -47,4 +47,5 @@ const out = path.join(PUBLIC, 'data', theory);
 fs.mkdirSync(out, { recursive: true });
 fs.writeFileSync(path.join(out, 'bundle.json'), JSON.stringify(bundle));
 fs.writeFileSync(path.join(out, 'dictionary.json'), JSON.stringify(merged));
+fs.writeFileSync(path.join(out, 'suffixes.json'), JSON.stringify(steno.buildSuffixes(Object.entries(merged))));
 console.log(`${theory}: ${bundle.words.length} words, ${Object.keys(merged).length} strokes -> ${out}`);

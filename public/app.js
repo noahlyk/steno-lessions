@@ -197,6 +197,7 @@
     releaseTimers: new Map(), // event.code -> pending debounced-release timeout id
     kbd: 'qwerty', // which keyboard diagram is shown: 'qwerty' or 'uni', following the last input
     uniKeyEls: new Map(), // Uni diagram key element -> the lever name it stands for
+    compose: null, // adds suffix spellings to a word (see steno.js suffixComposer)
     uniPressed: new Set(), // Uni v4 lever names held right now (machine input, see Task 3)
     typed: 0, // words finished this session
     pressed: new Set(),
@@ -540,6 +541,8 @@
   // Only stroke sequences that use unlocked keys are shown, so a word never asks for a locked key
   function startWord() {
     const word = currentWord();
+    // The word is also typed as another word plus a suffix stroke (film then -G for filming)
+    if (word && state.compose) state.compose(word);
     state.all = word ? L.displayVariants(word, unlockedMask()) : [];
     state.candidates = state.all;
     state.partial = 0;
@@ -1635,6 +1638,13 @@
     }
     // The dictionary has no numbers, so add every one-stroke number: the only way to practice
     // the # key, which makes digits when held with other keys.
+    // Suffix strokes (-G for -ing ...) let a word also be typed as another word plus a suffix.
+    // Optional: a theory without a suffixes.json just accepts its dictionary's own spellings.
+    try {
+      state.compose = S.suffixComposer(state.data.words, await getJson(THEORIES[theory].dir + 'suffixes.json'));
+    } catch {
+      state.compose = null;
+    }
     state.data.words = state.data.words.concat(S.buildNumberWords());
     buildIndexes(state.data.layout);
     buildStrokeIndex(state.data.words);
