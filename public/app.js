@@ -4,7 +4,6 @@
 (function () {
   const S = window.StenoData;
   const L = window.StenoLessons;
-  const D = window.StenoDrills;
 
   // The full keyboard, row by row. `label` is the key's main character. `shift` is the
   // character shown when Shift is held. Keys with a `code` are named keys (Shift, Tab, ...).
@@ -99,19 +98,6 @@
     }
   }
   let theory = readTheory();
-
-  // Which Lapwing drill chapter to practise (see lib/drills.js), or none for the theory's own words.
-  // Saved in this browser; switching reloads the page so the lessons start from the new word list.
-  const DRILLS_KEY = "steno-lessions.drills";
-  function readDrillChapter() {
-    try {
-      const value = Number(localStorage.getItem(DRILLS_KEY));
-      return Number.isInteger(value) && value > 0 ? value : null;
-    } catch {
-      return null;
-    }
-  }
-  let drillChapter = readDrillChapter();
 
   // Whether a theory's data is published here. Only the headers are read: the body is
   // cancelled, so the check costs no download. A theory that isn't published (Lapwing's data
@@ -1330,31 +1316,6 @@
       }
       location.reload();
     });
-    // The Drills picker lists the Lapwing drill chapters when their data is published. Without
-    // them the picker is hidden and the lessons use the theory's own words, as before.
-    let drills = null;
-    try {
-      drills = await getJson('data/drills.json');
-    } catch {
-      drills = null;
-    }
-    const drillPicker = $('drills');
-    if (drills && drills.chapters.length) {
-      drillPicker.innerHTML = '<option value="">Off</option>' + drills.chapters
-        .map(({ chapter, title }) => `<option value="${chapter}">Chapter ${chapter}: ${escapeHtml(title)}</option>`).join('');
-      if (!drills.chapters.some(({ chapter }) => chapter === drillChapter)) drillChapter = null;
-      drillPicker.value = drillChapter ? String(drillChapter) : '';
-      drillPicker.addEventListener('change', (event) => {
-        try {
-          localStorage.setItem(DRILLS_KEY, event.target.value);
-        } catch {
-          // Without storage the choice still applies, but the next visit starts with Off
-        }
-        location.reload();
-      });
-    } else {
-      $('drills-picker').style.display = 'none';
-    }
     // Progress still has two homes: server.js's /api/progress when it's there to answer, or
     // this browser's localStorage on a static host with no server at all.
     try {
@@ -1369,12 +1330,9 @@
         state.progress = L.emptyProgress();
       }
     }
-    // A drill chapter replaces the theory's words with its drill words. Otherwise the dictionary
-    // has no numbers, so add every one-stroke number: the only way to practice the # key, which
-    // makes digits when held with other keys.
-    state.data.words = drills && drillChapter
-      ? D.wordsThrough(drills.chapters, drillChapter)
-      : state.data.words.concat(S.buildNumberWords());
+    // The dictionary has no numbers, so add every one-stroke number: the only way to practice
+    // the # key, which makes digits when held with other keys.
+    state.data.words = state.data.words.concat(S.buildNumberWords());
     buildIndexes(state.data.layout);
     buildStrokeIndex(state.data.words);
     loadFullResolver();

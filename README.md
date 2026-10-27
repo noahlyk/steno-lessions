@@ -33,18 +33,6 @@ Lapwing's data is built from its JSON dictionaries, which you download from
 node scripts/build-theory.js lapwing <folder with the downloaded .json files>
 ```
 
-## Drills
-
-The header's Drills dropdown practises the word lists from the Lapwing course, chapter by chapter
-(chapters 5 to 17 have word-list drills). A chapter includes the chapters before it. The lists are
-in `public/data/drills.json`, built from the course's `practice/*.txt` files:
-
-```sh
-node scripts/build-drills.js <folder with the practice .txt files>
-```
-
-Only lowercase words are kept, as with the dictionary. The chapter briefs are not included yet.
-
 This writes `public/data/lapwing/`, which is git-ignored (it's about 8 MB and generated). The GitHub
 Pages workflow builds it on every deploy, downloading the same JSON files, so the hosted site
 offers Lapwing too. Lapwing's inflected forms (such as `accorded` and `arranging`) live in its
