@@ -24,6 +24,9 @@
       <label class="toggle" title="On by default. Uncheck to let it fade away automatically once every key is sustained - least consequential to remove"><input type="checkbox" id="show-labels"> Stroke labels</label>
       <label class="toggle" title="On by default. Uncheck to let it fade away automatically once every key is sustained"><input type="checkbox" id="show-target"> Target highlight</label>
       <label class="toggle" title="On by default. Uncheck to let it fade away automatically once every key is sustained - most consequential to remove"><input type="checkbox" id="show-keyboard"> Keyboard diagram</label>
+      <label class="theory-picker" title="Which keyboard diagram to show. Typing works on either - QWERTY keys always, and the Uni v4 once connected.">Keyboard
+        <select id="kbd-picker"><option value="qwerty">QWERTY</option><option value="uni">Uni v4</option></select>
+      </label>
     </div>
     <ul class="hud-row key-chips" id="key-chips"></ul>
     <div class="hud-row hud-line" id="unlock-status"></div>
@@ -44,11 +47,16 @@
 
     <section class="keyboard-wrap">
       <div class="keyboard" id="keyboard" aria-label="QWERTY keyboard"></div>
+      <div class="keyboard uni off" id="uni-keyboard" aria-label="Uni v4 steno machine"></div>
       <p class="legend">
         <span class="swatch steno"></span> steno key
         <span class="swatch locked"></span> locked
         <span class="swatch target"></span> target
         <span class="swatch down"></span> held
+      </p>
+      <p class="uni-connect">
+        <button type="button" id="connect-uni">Connect Uni v4</button>
+        <span id="uni-status" class="muted"></span>
       </p>
     </section>
   </main>
@@ -60,7 +68,9 @@
       <input type="text" id="import-progress" class="import-box" autocomplete="off" spellcheck="false" placeholder="Paste here&hellip;">
     </label>
     <span class="footer-links">
-      <a href="https://github.com/noahlyk/steno-lessions" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/CRAZECRAZE/steno-lessions" target="_blank" rel="noopener">GitHub</a>
+      &middot;
+      fork of <a href="https://github.com/noahlyk/steno-lessions" target="_blank" rel="noopener">steno-lessions</a>
       &middot;
       inspired by <a href="https://www.keybr.com/" target="_blank" rel="noopener">keybr.com</a>'s excellent one-key-at-a-time lessons
     </span>
@@ -87,6 +97,7 @@
   <script src="lib/steno.js"></script>
   <script src="lib/word-frequency.js"></script>
   <script src="lib/lessons.js"></script>
+  <script src="lib/uni.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

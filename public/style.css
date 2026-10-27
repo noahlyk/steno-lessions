@@ -647,6 +647,27 @@ body.paused #practice .feedback {
   opacity: 0.6;
 }
 
+/* The Uni v4 diagram: the machine drawn as it is - a unibody split board, two key rows
+   and a thumb row, left half five columns, right half six. Keys are direct grid children
+   in row-major order, so an empty thumb-row corner is just a .key.spacer cell. */
+.keyboard.uni { display: flex; gap: 48px; justify-content: center; }
+.uni-half { display: grid; gap: 6px; grid-auto-rows: var(--kh); }
+.uni-half.left { grid-template-columns: repeat(5, var(--u)); }
+.uni-half.right { grid-template-columns: repeat(6, var(--u)); }
+/* Uni keys are colored by steno group (left orange / vowels blue / right purple), matching
+   the stream's sound coloring via the same theme vars - the QWERTY diagram's per-finger
+   colors don't exist on a machine. The # keys have no group and keep the plain steno tint. */
+.keyboard.uni .key.steno[data-group="left"] { --finger: var(--left-ink); }
+.keyboard.uni .key.steno[data-group="middle"] { --finger: var(--middle-ink); }
+.keyboard.uni .key.steno[data-group="right"] { --finger: var(--right-ink); }
+/* Locked Uni keys read as bare keycaps: the sound stays hidden until the key unlocks. */
+.keyboard.uni .key.steno.locked .main.sound { visibility: hidden; }
+/* The scaffold collapse (see .keyboard.empty above) also takes the Uni halves away. */
+.keyboard.uni.empty .uni-half { display: none; }
+/* Only one diagram is on the page at a time; 'off' hides the inactive one whole. Placed
+   after .keyboard.uni so hiding wins the equal-specificity contest. */
+.keyboard.off { display: none; }
+
 .key .sound {
   position: absolute;
   bottom: 3px;
@@ -706,6 +727,32 @@ body.paused #practice .feedback {
   color: var(--muted);
   font-size: 13px;
 }
+
+/* The Uni v4 connect row: one quiet button and its status word, under the legend. */
+.uni-connect {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.uni-connect button {
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.uni-connect button:hover:not(:disabled) { border-color: var(--divider); }
+
+.uni-connect button:disabled { opacity: 0.5; cursor: default; }
+
+.uni-connect .muted { color: var(--muted); font-size: 13px; }
 
 .swatch {
   display: inline-block;

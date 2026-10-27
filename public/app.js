@@ -4,6 +4,7 @@
 (function () {
   const S = window.StenoData;
   const L = window.StenoLessons;
+  const U = window.UniV4;
 
   // The full keyboard, row by row. `label` is the key's main character. `shift` is the
   // character shown when Shift is held. Keys with a `code` are named keys (Shift, Tab, ...).
@@ -79,6 +80,19 @@
   function applyHints() {
     document.body.classList.toggle("hints-off", !state.hints);
     $("hints").checked = state.hints;
+  }
+
+  // Which keyboard diagram the page shows: the QWERTY board (how the lessons were played
+  // before there was a machine) or the Uni v4, drawn in its real split-ortholinear shape.
+  // Diagram choice only - typing works on either, QWERTY keys always and the machine once
+  // it is connected. Saved in this browser.
+  const KBD_KEY = "steno-lessions.kbd";
+  function readKbd() {
+    try {
+      return localStorage.getItem(KBD_KEY) === "uni" ? "uni" : "qwerty";
+    } catch {
+      return "qwerty";
+    }
   }
 
   // Which steno theory the lessons use. Each one has its own folder of data: Plover's sits at
@@ -190,6 +204,9 @@
     // first word(s) of the next stretch get the slow entrance animation instead of just appearing
     breakTimer: null,
     releaseTimers: new Map(), // event.code -> pending debounced-release timeout id
+    kbd: readKbd(), // which keyboard diagram is shown: 'qwerty' or 'uni'
+    uniKeyEls: new Map(), // Uni diagram key element -> the lever name it stands for
+    uniPressed: new Set(), // Uni v4 lever names held right now (machine input, see Task 3)
     typed: 0, // words finished this session
     pressed: new Set(),
     chordBits: 0,
@@ -233,8 +250,10 @@
     .map((bits) => S.displayStroke(bits));
   const currentStroke = () => shownStrokes()[state.strokeIdx] || 0;
   const unlockedMask = () => L.unlockedMask(state.progress, state.slotIndex);
-  // The steno keys held right now, as a stroke mask
-  const heldBits = () => [...state.pressed].reduce((bits, code) => bits | (state.infoByCode.get(code)?.bits || 0), 0);
+  // The steno keys held right now, as a stroke mask - from the QWERTY keys and, once a
+  // machine is connected, from the Uni v4 levers held at the same moment.
+  const heldBits = () => [...state.pressed].reduce((bits, code) => bits | (state.infoByCode.get(code)?.bits || 0), 0)
+    | U.strokeBits([...state.uniPressed]);
 
   function setFeedback(text, kind) {
     const el = $('feedback');
@@ -293,8 +312,10 @@
   }
 
   // The physical keys to press for a stroke, using combined keys where they fit, so the
-  // hint reads like the chord on the keyboard (e.g. "V" for A- and O-).
+  // hint reads like the chord on the keyboard (e.g. "V" for A- and O-). In Uni v4 mode
+  // the hint is the steno key names instead - on the machine, the key IS the steno key.
   function keysFor(bits) {
+    if (state.kbd === 'uni') return U.hintNames(bits);
     const keys = state.data.layout.keys
       .filter((key) => key.bits && (key.bits & ~bits) === 0)
       .sort((a, b) => S.popcount(b.bits) - S.popcount(a.bits));
@@ -395,6 +416,46 @@
     });
   }
 
+  // The Uni v4 drawn as it physically is: a unibody split board, two key rows and a thumb
+  // row, left half five columns and right half six. Keys are placed by U.UNI_KEYS, so the
+  // diagram is the machine, not an approximation of one. Sounds and colors come from the
+  // loaded theory bundle and the steno groups, like the stream's sound coloring.
+  function buildUniKeyboard() {
+    if (!state.data) return;
+    const board = $('uni-keyboard');
+    board.textContent = '';
+    const soundOf = new Map(state.data.layout.slots.map((slot) => [slot.name, slot.sound]));
+    for (const half of ['L', 'R']) {
+      const halfEl = document.createElement('div');
+      halfEl.className = `uni-half ${half === 'L' ? 'left' : 'right'}`;
+      const columns = half === 'L' ? 5 : 6;
+      for (let row = 0; row < 3; row++) {
+        for (let col = 0; col < columns; col++) {
+          const key = U.UNI_KEYS.find((k) => k.half === half && k.row === row && k.col === col);
+          const el = document.createElement('div');
+          if (!key) {
+            // A gap in the grid (the thumb row's empty corners) is a spacer, invisible
+            el.className = 'key spacer';
+            halfEl.appendChild(el);
+            continue;
+          }
+          el.className = 'key steno';
+          el.dataset.group = S.keyGroup(key.slot) || 'plain';
+          const sound = document.createElement('span');
+          sound.className = 'main sound';
+          sound.textContent = soundOf.get(key.slot) || '';
+          const letter = document.createElement('span');
+          letter.className = 'letter';
+          letter.textContent = S.displayName(key.slot);
+          el.append(sound, letter);
+          state.uniKeyEls.set(el, key.name);
+          halfEl.appendChild(el);
+        }
+      }
+      board.appendChild(halfEl);
+    }
+  }
+
   // Prestige scaffold fading: least-consequential first. Each stage only ever changes a
   // *default* - the matching checkbox (state.progress.scaffolds.{labels,target,keyboard}, on
   // by default) always wins, so nothing is ever taken away with no way to restore it.
@@ -412,13 +473,25 @@
     document.body.classList.toggle('scaffold-labels-off', !labelsOn);
     // Most consequential scaffold: off collapses the keyboard to an empty box (its rows
     // removed, not merely dimmed), so there's no half-visible crutch to lean on.
+    // The active diagram - QWERTY or the Uni v4 - is the one that collapses; the other is
+    // hidden whole ('off'), since only one keyboard is on the page at a time.
+    const uniOn = state.kbd === 'uni';
+    $('keyboard').classList.toggle('off', uniOn);
+    $('uni-keyboard').classList.toggle('off', !uniOn);
     $('keyboard').classList.toggle('empty', !keyboardOn);
+    $('uni-keyboard').classList.toggle('empty', !keyboardOn);
     for (const [el, codes] of state.keyEls) {
       const info = state.infoByCode.get(codes[0]);
       el.classList.toggle('steno', Boolean(info));
       el.classList.toggle('locked', Boolean(info) && (info.bits & ~mask) !== 0);
       el.classList.toggle('target', state.hints && targetOn && Boolean(info) && target !== 0 && (info.bits & target) === info.bits);
       el.classList.toggle('down', codes.some((code) => state.pressed.has(code)));
+    }
+    for (const [el, name] of state.uniKeyEls) {
+      const bits = U.strokeBits([name]);
+      el.classList.toggle('locked', (bits & ~mask) !== 0);
+      el.classList.toggle('target', state.hints && targetOn && target !== 0 && (bits & target) === bits);
+      el.classList.toggle('down', state.uniPressed.has(name));
     }
   }
 
@@ -561,7 +634,10 @@
         // preview keeps showing that stroke's resolution (state.previewBits) until the next
         // one starts replacing it, live, key by key.
         // A stroke still waiting for its rest (state.partial) stays in the preview while it is completed.
-        const held = state.pressed.size > 0 ? state.partial | state.chordBits : state.partial || state.previewBits;
+        // "Held" spans both input sources: a chord held only on the Uni v4 is just as live.
+        const held = state.pressed.size > 0 || state.uniPressed.size > 0
+          ? state.partial | state.chordBits
+          : state.partial || state.previewBits;
         // Strokes of this word already typed right stay put, in order, ahead of the stroke
         // being held (TKAT then A reads "dat" and keeps "dat" once TKAT is let go).
         const shown = L.previewFor({
@@ -1197,6 +1273,7 @@
   // Drops the chord being typed and stops the word clock, so time away from the page is not counted
   function clearChord() {
     state.pressed.clear();
+    state.uniPressed.clear();
     state.chordBits = 0;
     state.lastChordEnd = null;
     for (const timer of state.releaseTimers.values()) clearTimeout(timer);
@@ -1250,7 +1327,7 @@
     const info = state.infoByCode.get(event.code);
     if (!info) return;
     event.preventDefault();
-    if (state.pressed.size === 0) {
+    if (state.pressed.size === 0 && state.uniPressed.size === 0) {
       // A fresh stroke starts clean: finishChord already zeroed state.chordBits and cleared
       // every error visual the instant the last one was let go, so there is nothing left over
       // here to hide. The failures state is untouched, so undo (*)
@@ -1268,11 +1345,103 @@
     const timer = setTimeout(() => {
       state.releaseTimers.delete(event.code);
       state.pressed.delete(event.code);
-      if (state.pressed.size === 0) finishChord();
+      // The chord is over only when both input sources are empty - a Uni chord still held
+      // while the last QWERTY key comes up (or the reverse) keeps building.
+      if (state.pressed.size === 0 && state.uniPressed.size === 0) finishChord();
       renderChord();
     }, RELEASE_DEBOUNCE_MS);
     state.releaseTimers.set(event.code, timer);
   });
+
+  // The Uni v4 (Plover HID firmware) speaks its state over WebHID: every state change is
+  // one report - report id 0x50, then 8 bytes of a 64-bit lever bitmask. A stroke is the
+  // state going non-empty and then back to all-zero, which mirrors finishChord's
+  // last-key-up model. Reports are snapshots, so each non-zero report is OR-ed into the
+  // chord: a lever that went down and up mid-stroke is kept, exactly like Plover's own
+  // accumulation. Plover itself keeps reading the same device - on Linux, hidraw hands a
+  // copy of every report to each reader - so the machine can stay connected to both.
+  let uniDevice = null;
+  function setUniStatus(text) { $('uni-status').textContent = text; }
+
+  async function connectUni() {
+    if (!navigator.hid) {
+      setFeedback('The Uni v4 needs a Chromium browser (Chrome, Edge, Chromium) for WebHID.', 'bad');
+      return;
+    }
+    // Already connected: reopening the picker would only invite a second open() rejection
+    // or a second listener on the same device.
+    if (uniDevice) return;
+    const button = $('connect-uni');
+    button.disabled = true;
+    try {
+      const [device] = await navigator.hid.requestDevice({ filters: [{ usagePage: U.USAGE_PAGE, usage: U.USAGE }] });
+      if (!device) { setFeedback('No Uni selected.', 'bad'); return; }
+      await device.open();
+      uniDevice = device;
+      device.addEventListener('inputreport', onUniReport);
+      device.addEventListener('disconnect', onUniDisconnect);
+      setUniStatus('connected');
+      setFeedback('Uni v4 connected. Its keys type here; QWERTY still works too.', 'good');
+    } catch (error) {
+      setFeedback(`Could not connect the Uni v4: ${error.message}`, 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  function onUniReport(event) {
+    // WebHID strips the report id into event.reportId (Plover's hidapi reads keep it as
+    // the first data byte) - pass both halves to the parser separately.
+    const payload = new Uint8Array(event.data.buffer, event.data.byteOffset, event.data.byteLength);
+    const state64 = U.parseHidState(event.reportId, payload);
+    if (state64 === null) return;
+    if (state.paused) { if (state64 !== 0n) resume(); else return; }
+    const levers = U.chartKeys(state64);
+    if (state64 === 0n) {
+      state.uniPressed.clear();
+      // The all-zero report is the chord's release. The chordBits guard keeps a stray or
+      // repeated zero report (connect while keys rest half-pressed) from fabricating a
+      // stroke out of nothing.
+      if (state.pressed.size === 0 && state.chordBits !== 0) finishChord();
+    } else {
+      if (state.pressed.size === 0 && state.uniPressed.size === 0) {
+        state.chordBits = 0;
+        state.chordStart = performance.now();
+      }
+      for (const name of levers) state.uniPressed.add(name);
+      state.chordBits |= U.strokeBits(levers);
+    }
+    renderChord();
+  }
+
+  function onUniDisconnect(event) {
+    // With more than one device ever connected, an older device's goodbye must not end the
+    // newer one's connection.
+    if (uniDevice && event.device && event.device !== uniDevice) return;
+    // The device object survives its own disconnect event, so take the listeners back off
+    // it - a reconnected device would otherwise stack a second copy of each handler.
+    event.device.removeEventListener('inputreport', onUniReport);
+    event.device.removeEventListener('disconnect', onUniDisconnect);
+    uniDevice = null;
+    // The machine's half of a held chord can never finish now - take its bits back out of
+    // the shared chord space, so a later QWERTY release doesn't score levers that are no
+    // longer on the desk. Any QWERTY keys still held keep building their chord.
+    state.chordBits &= ~U.strokeBits([...state.uniPressed]);
+    state.uniPressed.clear();
+    setUniStatus('');
+    setFeedback('Uni v4 disconnected. QWERTY typing still works.', 'bad');
+    renderChord();
+  }
+
+  function setupUni() {
+    const button = $('connect-uni');
+    if (!navigator.hid) {
+      button.disabled = true;
+      setUniStatus('Needs a Chromium browser');
+      return;
+    }
+    button.addEventListener('click', connectUni);
+  }
 
   window.addEventListener('blur', () => { clearChord(); pause(); });
   document.addEventListener('visibilitychange', () => {
@@ -1287,6 +1456,27 @@
   }
 
   async function init() {
+    // The keyboard-diagram picker: QWERTY or the Uni v4. A pure render switch - no reload,
+    // no data change, so it can move freely mid-lesson. Wired before the data load so it
+    // keeps working even when the bundle fails to load.
+    const kbdPicker = $('kbd-picker');
+    kbdPicker.value = state.kbd;
+    kbdPicker.addEventListener('change', (event) => {
+      state.kbd = event.target.value;
+      try {
+        localStorage.setItem(KBD_KEY, state.kbd);
+      } catch {
+        // Without storage the choice still applies, but the next visit starts on QWERTY
+      }
+      renderKeyboard();
+      refresh();
+    });
+    // Show the persisted diagram right away - the first data-driven render is only after
+    // the bundle fetches, and a saved Uni v4 choice should not flash the QWERTY board.
+    renderKeyboard();
+    // The Uni v4 connect button, also wired before the data load: connecting the machine
+    // has no dependency on the bundle, and the button should say so even when it fails.
+    setupUni();
     // The layout and dictionary are hardcoded data, the same on a plain static host (e.g.
     // GitHub Pages) as behind server.js, so there's exactly one place to load them from.
     const ready = Object.fromEntries(await Promise.all(
@@ -1337,6 +1527,7 @@
     buildStrokeIndex(state.data.words);
     loadFullResolver();
     buildKeyboard();
+    buildUniKeyboard();
     applyHints();
     $("hints").addEventListener("change", (event) => {
       state.hints = event.target.checked;

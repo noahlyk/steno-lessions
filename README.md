@@ -1,5 +1,7 @@
 # [▶ Open steno-lessions](https://noahlyk.github.io/steno-lessions/)
 
+*A fork of [steno-lessions](https://github.com/noahlyk/steno-lessions) by noahlyk — this fork adds [Uni v4](https://stenokeyboards.com/products/the-uni-v4) machine support: a diagram of the board and real input over WebHID (Plover HID), alongside the original QWERTY typing. See [the design doc](docs/superpowers/specs/2026-10-26-uni-v4-design.md).*
+
 Learn steno one key at a time, the way keybr and monkeytype teach typing. You type on your normal keyboard. The page turns your key presses into steno strokes, and the keyboard shows which keys are steno keys and what sound each one makes.
 
 The layout and dictionary are hardcoded into `public/data/bundle.json` — no external program or dictionary install needed, and the same data is used whether you run the page through `server.js` or open it as plain static files (e.g. GitHub Pages).
@@ -52,6 +54,19 @@ every push to `main`.
 Keep your keyboard in its normal mode. The page reads the keys as you press them, so there is nothing to switch. Steno mode only matters for typing into other apps.
 
 Keys are taken over only when they are steno keys. Ctrl, Alt and Meta combos, and every other key, go to the browser and the system as usual.
+
+## The Uni v4
+
+The Keyboard picker in the header switches the diagram between your QWERTY keyboard and the Uni v4, drawn as the machine really is: a unibody split board, two key rows and a thumb row, all 28 keys in their real places (`S- T- P- H- ★ ★ -F -P -L -T -D` over `S- K- W- R- ★ ★ -R -B -G -S -Z` over `# A- O- -E -U #`). Everything else works the same on it: keys unlock in the same order, locked keys sit dark with no sound, the target stroke is highlighted, and held keys light up — the exact physical key, including which of the split S or star keys you pressed. In Uni v4 mode the "keys to press" line under each word shows steno key names (`A -T`) instead of QWERTY letters (`C P`), because on the machine the key *is* the steno key.
+
+To type on the machine itself, click **Connect Uni v4** under the keyboard. The board speaks the Plover HID protocol, and the page reads it over WebHID, so:
+
+- Use a Chromium browser (Chrome, Edge, Chromium — Firefox and Safari have no WebHID; the button tells you).
+- Plover can stay connected to the board the whole time — on Linux every reader of the device gets a copy of each report. You do not have to disconnect anything.
+- Consider turning Plover's Output off while practicing: with it on, Plover types its translations into whatever window has focus.
+- QWERTY typing keeps working exactly as before, alongside machine input.
+
+If the board is unplugged mid-lesson the page says so and carries on on the keyboard. Your progress is unaffected either way: the lesson engine tracks steno keys, not physical keys, so the same progress counts on both inputs.
 
 ## How to practice
 
