@@ -1799,5 +1799,13 @@
     cancelBtn.addEventListener('click', onCancelClick);
   }
 
-  init();
+  // If the page cannot start, say why on the page. Without this a failure in init() is silent
+  // and the page is just blank.
+  init().catch((error) => {
+    console.error(error);
+    const box = $('error');
+    box.hidden = false;
+    box.textContent = `The page could not start: ${error && error.message ? error.message : error}. ` +
+      'Try a hard refresh (Ctrl+Shift+R). If it keeps happening, the message above is what to report.';
+  });
 })();

@@ -34,6 +34,11 @@ jobs:
           done
       - name: Build Lapwing's data
         run: node scripts/build-theory.js lapwing "$RUNNER_TEMP/lapwing"
+      # Pages lets browsers cache files for 10 minutes, so right after a deploy a browser can pair a
+      # new index.html with an older script (or the reverse), and the page fails to start. Putting
+      # the commit in the script and style URLs ties them to the index.html that asked for them.
+      - name: Version the script and style URLs
+        run: sed -i -E "s#((src|href)=\"(app\.js|style\.css|lib/[a-z-]+\.js))\"#\1?v=${GITHUB_SHA}\"#" public/index.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: public
